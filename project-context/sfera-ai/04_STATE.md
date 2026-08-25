@@ -4,9 +4,8 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-25` — репозиторий создан, архитектура и справочные
-материалы перенесены из `FullSphera`, план реорганизован в структуру
-`project-context/sfera-ai/` (PRD/CONTEXT/TDD/EPICS/STATE) по образцу `SFERA-Tools`.
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-01-project-scaffold.md`
+выполнен: uv-проект инициализирован, зависимости добавлены, коммит сделан.
 
 ## Внешние гейты / блокеры
 
@@ -15,11 +14,11 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-01-project-scaffold.md` (см. `05_EPICS.md`, эпик
-E0) — первый шаг подробного task-by-task разбора: bootstrap сервиса, минимальный
-Python-проект, `Dockerfile`, подключение к БД (SQLAlchemy `automap` reflection на 2-3
-таблицах платформы), smoke-test чтения одной реальной записи `Application`. Ничего не
-пишется, только чтение.
+`epics/E0-service-bootstrap/step-E0-02-env-config.md` (см. `05_EPICS.md`, эпик E0) —
+шаг 2 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
+подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах платформы,
+smoke-test чтения одной реальной записи `Application`; ничего не пишется, только
+чтение). Шаг 1 (`step-E0-01-project-scaffold.md`) выполнен.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -31,7 +30,7 @@ Python-проект, `Dockerfile`, подключение к БД (SQLAlchemy `a
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаг 1/8: scaffold — DONE) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -44,6 +43,10 @@ Python-проект, `Dockerfile`, подключение к БД (SQLAlchemy `a
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-01-project-scaffold.md` выполнен: uv установлен (brew,
+  0.12.6), `uv init --package` (src-layout), добавлены sqlalchemy/psycopg[binary]/
+  pydantic-settings + dev pytest, `uv.lock` создан, `py.typed`/`tests/__init__.py`
+  добавлены. `uv run python -c "import sfera_ai"` проходит. Коммит `40073bf`.
 - `2026-08-25` — репозиторий создан, архитектура и справочные материалы перенесены из
   `FullSphera` (единый `ARCHITECTURE.md`, `PLATFORM_AUDIT_REFERENCE.md`,
   `PLATFORM_video-transcription-plan/`).

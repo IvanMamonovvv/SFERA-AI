@@ -1,6 +1,6 @@
 # Шаг E0-01 — Project scaffold (uv, src-layout)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** —
 **Перед началом:** прочитай `03_TDD.md` раздел «1. Обзор решения» (отдельный git-репозиторий,
 Python-проект под `uv`), `05_EPICS.md` эпик E0.
@@ -55,8 +55,8 @@ git commit -m "chore: scaffold uv Python project"
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run python -c "import sfera_ai"` не падает
-- [ ] `uv.lock` закоммичен
+- [x] `uv run python -c "import sfera_ai"` не падает
+- [x] `uv.lock` закоммичен
 
 ## Как проверить
 
@@ -70,4 +70,7 @@ uv run python -c "import sfera_ai"
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-26 — uv установлен через brew (0.12.6), `uv init --package` создал pyproject.toml/src-layout/README.
+  Добавлены sqlalchemy/psycopg[binary]/pydantic-settings + dev pytest, `uv.lock` создан. `.gitignore` уже содержал
+  нужные записи (не менялся). Созданы `src/sfera_ai/py.typed`, `tests/__init__.py`. `uv run python -c "import sfera_ai"`
+  прошёл. Коммит `40073bf`.
