@@ -4,11 +4,10 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-07-shared-docker-network.md`
-выполнен: `ai_shared` docker-сеть создана на VPS, `db` backend'а подключён к ней,
-`docker-compose.yml` AI-сервиса готов. Backend/scheduler живы (был кратковременный
-инцидент с `scheduler` после пересоздания `db` — устранён рестартом, детали в
-журнале шага).
+**Последнее обновление:** `2026-08-26` — эпик E0 (bootstrap) реализован: uv-проект,
+env-конфиг, reflection, smoke-test, Dockerfile, общая docker-сеть `ai_shared`. Ручной
+прогон smoke-теста на проде отложен (роль `ai_readonly` не подтверждена, см. блокер
+ниже). Следующий шаг — эпик E1 (`VacancyProfile`).
 
 ## Внешние гейты / блокеры
 
@@ -23,10 +22,9 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-08-state-update.md` (см. `05_EPICS.md`, эпик E0) —
-последний, 8 из 8, шаг эпика E0 (финальное обновление `04_STATE.md` по итогам bootstrap).
-Шаги 1-7 выполнены (E0-04 и E0-05 — частично: код готов, реальный прогон на проде
-отложен до подтверждения роли `ai_readonly`, см. блокер выше и журнал).
+Эпик E0 (bootstrap) завершён. Следующий шаг — эпик **E1** (`VacancyProfile`), см.
+`05_EPICS.md`. Ручной прогон smoke-теста на проде (E0-05) остаётся отложенным до
+подтверждения роли `ai_readonly` (см. блокер выше) — не блокирует старт E1.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -38,7 +36,7 @@
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-7/8: scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть — DONE, ручной прогон на проде отложен) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть — DONE, ручной прогон на проде отложен) | DONE | 2026-08-26 |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -51,6 +49,10 @@
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-08-state-update.md` выполнен: эпик E0 (bootstrap)
+  реализован — uv-проект, env-конфиг, reflection, smoke-test, Dockerfile, общая
+  docker-сеть. `E0-01` в доске статусов отмечен `DONE`. Текущий следующий шаг —
+  эпик E1 (`VacancyProfile`).
 - `2026-08-26` — шаг `step-E0-07-shared-docker-network.md` выполнен. Владелец дал
   SSH-доступ к VPS и подтвердил прод-операцию отдельно от общего согласия 2026-08-25.
   На VPS: `docker network create ai_shared`, `db` backend'а подключён к ней (правка
