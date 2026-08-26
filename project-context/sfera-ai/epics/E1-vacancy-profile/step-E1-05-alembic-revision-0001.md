@@ -1,6 +1,6 @@
 # Шаг E1-05 — Alembic-ревизия 0001: `ai_vacancy_profile`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-04
 
 ## Цель
@@ -89,4 +89,11 @@ uv run alembic -x sqlalchemy.url=sqlite:///./_migration_check.db upgrade head &&
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — ревизия `0001_ai_vacancy_profile.py` написана вручную (upgrade/downgrade
+  по шагу, revision id заменён с автосгенерированного hash на `0001` для читаемого
+  порядка). Step 3 (`-x sqlalchemy.url=sqlite:...`) не сработал — `migrations/env.py`
+  безусловно ставит `sqlalchemy.url` из `Settings().write_database_url`, `-x` не
+  учитывается, попытка подключиться к порту 5434 (уже снесённый локальный Postgres из
+  E1-01) упала `Connection refused`. Использован запасной вариант из примечания шага:
+  `uv run alembic upgrade head --sql` — сгенерированный DDL проверен визуально, корректен
+  (SERIAL, FK CASCADE, partial unique index на `is_current`), ошибок нет.

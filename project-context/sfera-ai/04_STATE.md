@@ -4,8 +4,8 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E1 продолжен: `step-E1-04-vacancy-profile-model.md`
-выполнен (модель `VacancyProfile`). Следующий шаг — `step-E1-05` (Alembic-миграция таблицы).
+**Последнее обновление:** `2026-08-26` — эпик E1 продолжен: `step-E1-05-alembic-revision-0001.md`
+выполнен (ревизия `0001_ai_vacancy_profile`). Следующий шаг — `step-E1-06` (см. `05_EPICS.md`).
 
 ## Внешние гейты / блокеры
 
@@ -43,6 +43,15 @@
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E1-05-alembic-revision-0001.md` выполнен: ревизия
+  `migrations/versions/0001_ai_vacancy_profile.py` — `upgrade` создаёт `ai_vacancy_profile`
+  с FK `course_id → courses_course.id` (`ondelete='CASCADE'`) и partial unique index
+  `uq_vacancy_profile_course_current` (гарантия ровно одного `is_current=True` на course).
+  `revision id` заменён с автосгенерированного hash на `0001`. Синтаксическая проверка на
+  SQLite не сработала (`env.py` игнорирует `-x`, всегда берёт `write_database_url`,
+  порт 5434 из E1-01 уже снесён) — использован запасной путь из шага, `alembic upgrade
+  head --sql` — DDL сгенерирован и проверен визуально, без ошибок. Реальное применение
+  на прод — отдельно на E1-09, с подтверждением владельца.
 - `2026-08-26` — шаг `step-E1-04-vacancy-profile-model.md` выполнен: модель `VacancyProfile`
   (`src/sfera_ai/models/vacancy_profile.py`) — поля по TDD, `UniqueConstraint(course_id,
   version)`, `course_id` — простой `Mapped[int]` без `ForeignKey` (FK-констрейнт будет в
