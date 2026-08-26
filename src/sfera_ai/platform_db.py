@@ -10,3 +10,6 @@ def reflect_platform_tables(engine: Engine, *, tables: Sequence[str]) -> Automap
     base = automap_base(metadata=metadata)
     base.prepare()
     return base
+
+
+IDENTITY_RESOLVER_TABLES = ("courses_application", "headhunter_hhnegotiationrecord")
