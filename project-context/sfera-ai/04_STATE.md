@@ -46,6 +46,18 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E2-04-resolve-or-create.md` выполнен:
+  `resolve_or_create_candidate_profile` (`src/sfera_ai/services/candidate_identity.py`) —
+  два входа `NEW_HH_LEAD`/`NEW_APPLICATION`, для `NEW_APPLICATION` проверяет через
+  reflection обратную связь `HHNegotiationRecord.application_id`, чтобы не создать
+  дубль `CandidateProfile`. `_insert_or_resolve_race` резолвит `IntegrityError` от
+  параллельной вставки в выигравшую строку. **Найден и исправлен пробел в шаге:**
+  `platform_base.metadata.bind` не существует в SQLAlchemy 2.0.52 (`MetaData.bind`
+  убран) — `reflect_platform_tables` (`platform_db.py`) теперь кладёт
+  `base.engine = engine` явным атрибутом, сервис берёт `platform_base.engine`. Тест
+  `tests/services/test_candidate_identity.py` — 4 passed, полный сьют 18 passed,
+  регрессий нет. Коммит `d26f595`. Эпик E2 не завершён — дальше следующие шаги
+  (`epics/E2-candidate-identity-resolver/`).
 - `2026-08-26` — шаг `step-E2-03-alembic-revision-0002.md` выполнен: ревизия
   `migrations/versions/0002_ai_candidate_profile.py` (`down_revision='0001'`) — таблица
   `ai_candidate_profile` с двумя FK (`ondelete='CASCADE'`) на

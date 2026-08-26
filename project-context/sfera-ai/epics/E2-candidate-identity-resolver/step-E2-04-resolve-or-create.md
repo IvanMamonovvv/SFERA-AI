@@ -1,6 +1,6 @@
 # Шаг E2-04 — `resolve_or_create_candidate_profile` — сервис identity
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2-02, E2-01
 **Перед началом:** прочитай `03_TDD.md`, раздел «Candidate Identity»; `02_CONTEXT.md`,
 «Граничные случаи». Два входа — `NEW_HH_LEAD` (передан `hh_negotiation_id`) и
@@ -255,4 +255,7 @@ uv run pytest tests/services/test_candidate_identity.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — реализован `resolve_or_create_candidate_profile` + `_insert_or_resolve_race`
+  + `_find_hh_negotiation_for_application`. Все 4 теста зелёные. Правка `platform_db.py`:
+  `reflect_platform_tables` теперь кладёт `base.engine = engine` — в SQLAlchemy 2.0
+  `MetaData.bind` убран, engine платформы больше негде было взять внутри сервиса.
