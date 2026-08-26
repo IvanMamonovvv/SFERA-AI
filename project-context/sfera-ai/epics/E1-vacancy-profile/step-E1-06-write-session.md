@@ -1,6 +1,6 @@
 # Шаг E1-06 — Write-сессия
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-02
 
 ## Цель
@@ -82,4 +82,5 @@ uv run pytest tests/test_db_session.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — `src/sfera_ai/db/session.py` реализован по шагу без изменений
+  (`make_session_factory`, `make_write_engine`). `uv run pytest` — 7 passed, регрессий нет.

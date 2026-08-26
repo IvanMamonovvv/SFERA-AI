@@ -4,11 +4,9 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0 (bootstrap) полностью реализован и
-проверен на проде: uv-проект, env-конфиг, reflection, smoke-test, Dockerfile, общая
-docker-сеть `ai_shared`, роль `ai_readonly` создана и подтверждена реальным прогоном
-(read работает, write падает `permission denied`). Следующий шаг — эпик E1
-(`VacancyProfile`).
+**Последнее обновление:** `2026-08-26` — эпик E1 (`VacancyProfile`) завершён — модель,
+Alembic 0001, versioning-сервис, CLI, миграция применена на проде. Следующий шаг —
+эпик **E2** (`CandidateProfile` identity resolver), см. `05_EPICS.md`.
 
 ## Внешние гейты / блокеры
 
@@ -20,8 +18,10 @@ docker-сеть `ai_shared`, роль `ai_readonly` создана и подтв
 
 ## Текущий следующий шаг
 
-Эпик E0 (bootstrap) полностью завершён, включая реальный прогон на проде. Следующий
-шаг — эпик **E1** (`VacancyProfile`), см. `05_EPICS.md`.
+Эпик E0 (bootstrap) и эпик E1 (`VacancyProfile`) полностью завершены, включая реальный
+прогон на проде. Следующий шаг — эпик **E2** (`CandidateProfile` identity resolver,
+`03_TDD.md`, раздел «Candidate Identity — переход HH Lead → Platform Candidate»), см.
+`05_EPICS.md`.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -34,7 +34,7 @@ docker-сеть `ai_shared`, роль `ai_readonly` создана и подтв
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
 | E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть, роль `ai_readonly` создана, прогон на проде подтверждён) | DONE | 2026-08-26 |
-| E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
+| E1-01 | `VacancyProfile` модель + CRUD | DONE | 2026-08-26 |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
 | E4-01 | Интеграция с `TranscriptionJob` | TODO | — |
@@ -46,6 +46,59 @@ docker-сеть `ai_shared`, роль `ai_readonly` создана и подтв
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E1-10-state-update.md` выполнен: эпик E1 (`VacancyProfile`)
+  реализован — модель, Alembic 0001, versioning-сервис, CLI. Доска статусов: `E1-01`
+  отмечен `DONE`. Следующий шаг — эпик E2 (`CandidateProfile` identity resolver).
+- `2026-08-26` — шаг `step-E1-09-apply-migration-prod.md` выполнен (владелец дал явное
+  разрешение и SSH root-доступ к VPS 5.42.120.39). БД найдена автоматически: контейнер
+  `sfera-staging-db-1` (Postgres 17), `POSTGRES_DB=sfera_db`, сеть `ai_shared`. Роль
+  `ai_owner` создана, пароль сгенерирован `openssl rand`, в git не коммитился, передан
+  владельцу, локальная копия удалена. **Найден и исправлен пробел в шаге:** FK на
+  `courses_course` требует `GRANT REFERENCES` — без него первый `alembic upgrade head`
+  падал `InsufficientPrivilege` (транзакция откатилась, прод не пострадал); грант добавлен
+  в предпосылки step-файла на будущее. Повторный прогон — `ai_vacancy_profile` создана
+  (`Running upgrade -> 0001`). CLI-проверка на реальном `course_id=2`: `create`/
+  `show-current` вернули `version=1, is_current=true`. Туннель и socat-proxy контейнер
+  снесены после проверки.
+- `2026-08-26` — шаг `step-E1-08-cli.md` выполнен: CLI `vacancy-profile
+  create/show-current/list` (`src/sfera_ai/cli/vacancy_profile.py`) поверх
+  `create_vacancy_profile_version`. Тест `tests/cli/test_vacancy_profile_cli.py` —
+  1 passed, полный сьют 10 passed, регрессий нет. Коммит `7da8fb1`.
+- `2026-08-26` — шаг `step-E1-07-versioning-service.md` выполнен:
+  `create_vacancy_profile_version` (`src/sfera_ai/services/vacancy_profile.py`) — снимает
+  `is_current` со старой версии через `session.flush()` до `INSERT` новой (порядок flush
+  для partial unique index), инкрементит `version`. Тесты `tests/services/test_vacancy_profile.py`
+  — 2 passed, полный сьют 9 passed, регрессий нет. Коммит `20ade28`.
+- `2026-08-26` — шаг `step-E1-06-write-session.md` выполнен: `src/sfera_ai/db/session.py`
+  (`make_session_factory`, `make_write_engine`) по шагу без изменений. `uv run pytest`
+  — 7 passed, регрессий нет.
+- `2026-08-26` — шаг `step-E1-05-alembic-revision-0001.md` выполнен: ревизия
+  `migrations/versions/0001_ai_vacancy_profile.py` — `upgrade` создаёт `ai_vacancy_profile`
+  с FK `course_id → courses_course.id` (`ondelete='CASCADE'`) и partial unique index
+  `uq_vacancy_profile_course_current` (гарантия ровно одного `is_current=True` на course).
+  `revision id` заменён с автосгенерированного hash на `0001`. Синтаксическая проверка на
+  SQLite не сработала (`env.py` игнорирует `-x`, всегда берёт `write_database_url`,
+  порт 5434 из E1-01 уже снесён) — использован запасной путь из шага, `alembic upgrade
+  head --sql` — DDL сгенерирован и проверен визуально, без ошибок. Реальное применение
+  на прод — отдельно на E1-09, с подтверждением владельца.
+- `2026-08-26` — шаг `step-E1-04-vacancy-profile-model.md` выполнен: модель `VacancyProfile`
+  (`src/sfera_ai/models/vacancy_profile.py`) — поля по TDD, `UniqueConstraint(course_id,
+  version)`, `course_id` — простой `Mapped[int]` без `ForeignKey` (FK-констрейнт будет в
+  Alembic-миграции E1-05 через raw DDL). Тест шага скорректирован: добавлен `updated_at` в
+  ожидаемые columns (`TimestampMixin` даёт `created_at`+`updated_at` вместе, отдельного
+  created_at-only варианта нет) — решение согласовано с владельцем. `uv run pytest` — 6
+  passed, регрессий нет.
+- `2026-08-26` — эпик E1 начат: `step-E1-02-write-database-url.md` и
+  `step-E1-03-declarative-base.md` выполнены первыми (`step-E1-01-alembic-init.md`
+  фактически зависит от них), затем `step-E1-01-alembic-init.md` (код). `Settings`
+  получил `write_database_url`, добавлены `sfera_ai/db/base.py` (`Base`,
+  `TimestampMixin`), alembic инициализирован (`env.py` читает `Settings`/`Base`).
+  Коммиты `7586075`, `ef4cc07`, `ac26c0a`. `.env.example` не обновлён — под глобальным
+  запретом чтения/правки агента, владелец добавит `WRITE_DATABASE_URL` сам. Проверка
+  `uv run alembic current` пройдена на разовом локальном Postgres (Docker, порт 5434,
+  снесён после теста) — не прод. Шаги `E1-01`/`E1-02`/`E1-03` отмечены `DONE` в своих
+  step-файлах. Реальный `WRITE_DATABASE_URL` для прода (роль `ai_owner`) — на шаге
+  `E1-09`, отдельная прод-операция с явным разрешением владельца.
 - `2026-08-26` — реальный прогон E0-04/E0-05 на проде выполнен (владелец дал явное
   разрешение на прод-операцию). Перед изменением схемы снят полный `pg_dump -Fc` бэкап
   `sfera_db` (сохранён локально в `.../scratchpad/backups/`, временная копия на VPS

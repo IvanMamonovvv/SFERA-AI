@@ -1,6 +1,6 @@
 # Шаг E1-03 — Declarative Base + timestamp mixin
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-01
 
 ## Цель
@@ -113,4 +113,6 @@ uv run pytest tests/test_db_base.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — выполнено: `src/sfera_ai/db/base.py` (`Base`, `TimestampMixin`),
+  `tests/conftest.py` (`tmp_engine` sqlite in-memory), `tests/test_db_base.py` зелёный.
+  Коммит `ef4cc07`.
