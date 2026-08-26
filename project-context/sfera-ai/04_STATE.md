@@ -4,8 +4,9 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-01-project-scaffold.md`
-выполнен: uv-проект инициализирован, зависимости добавлены, коммит сделан.
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-02-env-config.md`
+выполнен: `Settings` (pydantic-settings) читает `PLATFORM_DATABASE_URL`, тест зелёный,
+`.env.example` создан.
 
 ## Внешние гейты / блокеры
 
@@ -14,11 +15,12 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-02-env-config.md` (см. `05_EPICS.md`, эпик E0) —
-шаг 2 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
+`epics/E0-service-bootstrap/step-E0-03-reflection-module.md` (см. `05_EPICS.md`, эпик E0) —
+шаг 3 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
 подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах платформы,
 smoke-test чтения одной реальной записи `Application`; ничего не пишется, только
-чтение). Шаг 1 (`step-E0-01-project-scaffold.md`) выполнен.
+чтение). Шаги 1 (`step-E0-01-project-scaffold.md`) и 2 (`step-E0-02-env-config.md`)
+выполнены.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -30,7 +32,7 @@ smoke-test чтения одной реальной записи `Application`; 
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаг 1/8: scaffold — DONE) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-2/8: scaffold, env-config — DONE) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -43,6 +45,9 @@ smoke-test чтения одной реальной записи `Application`; 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-02-env-config.md` выполнен: `Settings` (pydantic-settings)
+  читает `PLATFORM_DATABASE_URL` из окружения/`.env`, тест `tests/test_config.py`
+  зелёный, `.env.example` создан (плейсхолдеры, без реального пароля). Коммит `5522817`.
 - `2026-08-26` — шаг `step-E0-01-project-scaffold.md` выполнен: uv установлен (brew,
   0.12.6), `uv init --package` (src-layout), добавлены sqlalchemy/psycopg[binary]/
   pydantic-settings + dev pytest, `uv.lock` создан, `py.typed`/`tests/__init__.py`
