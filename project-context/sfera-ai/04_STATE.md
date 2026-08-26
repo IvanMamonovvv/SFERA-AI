@@ -4,27 +4,24 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0 (bootstrap) реализован: uv-проект,
-env-конфиг, reflection, smoke-test, Dockerfile, общая docker-сеть `ai_shared`. Ручной
-прогон smoke-теста на проде отложен (роль `ai_readonly` не подтверждена, см. блокер
-ниже). Следующий шаг — эпик E1 (`VacancyProfile`).
+**Последнее обновление:** `2026-08-26` — эпик E0 (bootstrap) полностью реализован и
+проверен на проде: uv-проект, env-конфиг, reflection, smoke-test, Dockerfile, общая
+docker-сеть `ai_shared`, роль `ai_readonly` создана и подтверждена реальным прогоном
+(read работает, write падает `permission denied`). Следующий шаг — эпик E1
+(`VacancyProfile`).
 
 ## Внешние гейты / блокеры
 
-**Блокер перед ручным прогоном E0-05:** роль `ai_readonly` должна быть реально создана
-на прод-Postgres (DDL — `epics/E0-service-bootstrap/step-E0-04-ssh-tunnel.md`, раздел
-«Предпосылки»); статус на `2026-08-26` владельцу неизвестен («без понятия»). Создание
-роли требует владельца или агента с явным разрешением на прод-БД — вне доступа обычного
-агента этого репозитория.
+Блокеров нет. Роль `ai_readonly` создана на прод-Postgres 2026-08-26 (владелец дал явное
+разрешение), см. журнал `step-E0-04-ssh-tunnel.md` и `step-E0-05-smoke-test.md`.
 
 6 открытых вопросов (`02_CONTEXT.md`) — ни один не блокирует старт разработки,
 решаются по ходу, на своих шагах реализации.
 
 ## Текущий следующий шаг
 
-Эпик E0 (bootstrap) завершён. Следующий шаг — эпик **E1** (`VacancyProfile`), см.
-`05_EPICS.md`. Ручной прогон smoke-теста на проде (E0-05) остаётся отложенным до
-подтверждения роли `ai_readonly` (см. блокер выше) — не блокирует старт E1.
+Эпик E0 (bootstrap) полностью завершён, включая реальный прогон на проде. Следующий
+шаг — эпик **E1** (`VacancyProfile`), см. `05_EPICS.md`.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -36,7 +33,7 @@ env-конфиг, reflection, smoke-test, Dockerfile, общая docker-сеть
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть — DONE, ручной прогон на проде отложен) | DONE | 2026-08-26 |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть, роль `ai_readonly` создана, прогон на проде подтверждён) | DONE | 2026-08-26 |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -49,6 +46,18 @@ env-конфиг, reflection, smoke-test, Dockerfile, общая docker-сеть
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — реальный прогон E0-04/E0-05 на проде выполнен (владелец дал явное
+  разрешение на прод-операцию). Перед изменением схемы снят полный `pg_dump -Fc` бэкап
+  `sfera_db` (сохранён локально в `.../scratchpad/backups/`, временная копия на VPS
+  удалена). Роль `ai_readonly` создана строго по DDL из `step-E0-04-ssh-tunnel.md`
+  (её не было — подтвердил владелец), пароль сгенерирован `openssl rand`, отдан
+  владельцу, в git не коммитился. Туннель — временный socat-proxy контейнер в сети
+  `ai_shared` на VPS + `ssh -L` с локальной машины (снесён по завершении). Smoke-test
+  на `application_id=1`: `OK: read Application id=1`, `OK: write correctly rejected
+  (read-only role confirmed)`. Прямой `psql` от `ai_readonly` подтвердил то же: SELECT
+  проходит, INSERT — `permission denied for table courses_application`. Прод не
+  пострадал, ничего лишнего не удалено/не изменено кроме создания роли. Детали — в
+  журналах `step-E0-04-ssh-tunnel.md` и `step-E0-05-smoke-test.md`.
 - `2026-08-26` — шаг `step-E0-08-state-update.md` выполнен: эпик E0 (bootstrap)
   реализован — uv-проект, env-конфиг, reflection, smoke-test, Dockerfile, общая
   docker-сеть. `E0-01` в доске статусов отмечен `DONE`. Текущий следующий шаг —

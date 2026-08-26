@@ -1,6 +1,6 @@
 # Шаг E0-05 — Smoke-test: прочитать одну реальную запись `Application`
 
-**Статус:** DONE (частично — код готов, ручной прогон на проде не выполнен, см. журнал)
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0-03, E0-04
 
 ## Цель
@@ -82,13 +82,11 @@ git commit -m "feat: add DB reflection smoke test entrypoint"
 
 ## Критерии готовности (DoD)
 
-- [ ] Ручной прогон на реальном `application_id` печатает `OK: read Application id=<id>`
-      — **не выполнено**, требует туннеля (E0-04) и роли `ai_readonly` на проде
-      (статус роли неизвестен, см. `04_STATE.md`)
-- [ ] Попытка записи через `ai_readonly` падает с `DBAPIError`/`InsufficientPrivilege`,
+- [x] Ручной прогон на реальном `application_id` печатает `OK: read Application id=<id>`
+- [x] Попытка записи через `ai_readonly` падает с `DBAPIError`/`InsufficientPrivilege`,
       скрипт печатает `OK: write correctly rejected` — подтверждает, что роль реально
-      read-only, а не просто задокументирована как таковая — **не проверено**
-- [ ] Ничего не записывается в платформенную БД
+      read-only, а не просто задокументирована как таковая
+- [x] Ничего не записывается в платформенную БД
 
 ## Как проверить
 
@@ -103,7 +101,14 @@ uv run python -m sfera_ai.smoke_test <реальный_id_application>
 ## Журнал
 
 - `2026-08-26` — реализован `src/sfera_ai/smoke_test.py` (entrypoint читает `Application`
-  по id, проверяет что write падает через `ai_readonly`). Коммит `721dc6f`. **Ручной
-  прогон не выполнен** — нужен реальный туннель (E0-04, скрипт готов) и подтверждённая
-  роль `ai_readonly` на проде (статус на момент шага неизвестен владельцу). Прогнать
-  вручную и дописать id проверенной записи, когда будет доступ.
+  по id, проверяет что write падает через `ai_readonly`). Коммит `721dc6f`.
+- `2026-08-26` — ручной прогон на проде выполнен (владелец дал явное разрешение). Перед
+  началом снят полный `pg_dump -Fc` бэкап `sfera_db` (сохранён локально, на VPS
+  временная копия удалена после проверки). Роль `ai_readonly` создана DDL из
+  `step-E0-04-ssh-tunnel.md` (её не было — подтвердил владелец), пароль сгенерирован и
+  передан владельцу отдельно, не коммитился. Туннель поднят по схеме E0-07 (временный
+  socat-proxy контейнер в сети `ai_shared` на VPS + `ssh -L` с локальной машины),
+  удалён по завершении. `application_id=1` (первая запись, `courses_application`).
+  Результат: `OK: read Application id=1`, `OK: write correctly rejected (read-only role
+  confirmed)`. Прямая проверка на `psql` от имени `ai_readonly` тоже подтвердила:
+  `SELECT` проходит, `INSERT` падает `permission denied for table courses_application`.
