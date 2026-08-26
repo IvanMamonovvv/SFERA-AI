@@ -4,9 +4,11 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E1 (`VacancyProfile`) завершён — модель,
-Alembic 0001, versioning-сервис, CLI, миграция применена на проде. Следующий шаг —
-эпик **E2** (`CandidateProfile` identity resolver), см. `05_EPICS.md`.
+**Последнее обновление:** `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver)
+завершён — модель, Alembic 0002, `resolve_or_create_candidate_profile` с защитой от
+гонки, `promote_hh_lead_to_application`, backfill-скрипт, миграция и backfill реально
+прогнаны на проде (3461 профиль). Следующий шаг — эпик **E3** (`ResumeExtract`
+пайплайн), см. `05_EPICS.md`.
 
 ## Внешние гейты / блокеры
 
@@ -18,10 +20,9 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Текущий следующий шаг
 
-Эпик E0 (bootstrap) и эпик E1 (`VacancyProfile`) полностью завершены, включая реальный
-прогон на проде. Следующий шаг — эпик **E2** (`CandidateProfile` identity resolver,
-`03_TDD.md`, раздел «Candidate Identity — переход HH Lead → Platform Candidate»), см.
-`05_EPICS.md`.
+Эпики E0 (bootstrap), E1 (`VacancyProfile`) и E2 (`CandidateProfile` identity resolver)
+полностью завершены, включая реальный прогон на проде. Следующий шаг — эпик **E3**
+(`ResumeExtract` пайплайн, `03_TDD.md`, раздел «Resume Pipeline»), см. `05_EPICS.md`.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -35,7 +36,7 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
 | E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть, роль `ai_readonly` создана, прогон на проде подтверждён) | DONE | 2026-08-26 |
 | E1-01 | `VacancyProfile` модель + CRUD | DONE | 2026-08-26 |
-| E2-01 | `CandidateProfile` identity resolver | TODO | — |
+| E2-01 | `CandidateProfile` identity resolver | DONE | 2026-08-26 |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
 | E4-01 | Интеграция с `TranscriptionJob` | TODO | — |
 | E5-01 | `AIProcessingJob` + очередь (dry-run) | TODO | — |
@@ -46,6 +47,60 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver) реализован — модель,
+  Alembic 0002, `resolve_or_create_candidate_profile` с защитой от гонки,
+  `promote_hh_lead_to_application`, backfill-скрипт. Миграция и backfill реально
+  прогнаны на проде (`step-E2-07-apply-migration-prod.md`) — таблица
+  `ai_candidate_profile` создана, 3461 профиль (3310 с HH-привязкой, 1270 с
+  заявкой, 1119 пересечений корректно слиты). По пути на проде исправлены три
+  инфраструктурные проблемы, не связанные с кодом самой миграции: контейнер БД
+  отключился от сети `ai_shared` (переподключён), в `.env` разработчика были
+  плейсхолдеры вместо реальных прод-паролей (пароли `ai_owner`/`ai_readonly`
+  сброшены заново), не хватало `GRANT REFERENCES`/`GRANT SELECT` на таблицы
+  платформы для служебных ролей AI-сервиса (выданы). Детали — журнал
+  `step-E2-07-apply-migration-prod.md`. Доска статусов: `E2-01` отмечен `DONE`.
+  Следующий шаг — эпик E3 (`ResumeExtract` пайплайн).
+- `2026-08-26` — шаг `step-E2-05-transition.md` выполнен: `promote_hh_lead_to_application`
+  (`src/sfera_ai/services/candidate_transition.py`) — одна `UPDATE` строка по
+  `hh_negotiation_id` с условием `application_id IS NULL`, без `INSERT`; возвращает
+  `bool` (была ли строка обновлена). Тест `tests/services/test_candidate_transition.py`
+  — 2 passed, без изменений от черновика в шаге. Коммит `71ef56a`. Эпик E2 не
+  завершён — дальше следующие шаги (`epics/E2-candidate-identity-resolver/`).
+- `2026-08-26` — шаг `step-E2-04-resolve-or-create.md` выполнен:
+  `resolve_or_create_candidate_profile` (`src/sfera_ai/services/candidate_identity.py`) —
+  два входа `NEW_HH_LEAD`/`NEW_APPLICATION`, для `NEW_APPLICATION` проверяет через
+  reflection обратную связь `HHNegotiationRecord.application_id`, чтобы не создать
+  дубль `CandidateProfile`. `_insert_or_resolve_race` резолвит `IntegrityError` от
+  параллельной вставки в выигравшую строку. **Найден и исправлен пробел в шаге:**
+  `platform_base.metadata.bind` не существует в SQLAlchemy 2.0.52 (`MetaData.bind`
+  убран) — `reflect_platform_tables` (`platform_db.py`) теперь кладёт
+  `base.engine = engine` явным атрибутом, сервис берёт `platform_base.engine`. Тест
+  `tests/services/test_candidate_identity.py` — 4 passed, полный сьют 18 passed,
+  регрессий нет. Коммит `d26f595`. Эпик E2 не завершён — дальше следующие шаги
+  (`epics/E2-candidate-identity-resolver/`).
+- `2026-08-26` — шаг `step-E2-03-alembic-revision-0002.md` выполнен: ревизия
+  `migrations/versions/0002_ai_candidate_profile.py` (`down_revision='0001'`) — таблица
+  `ai_candidate_profile` с двумя FK (`ondelete='CASCADE'`) на
+  `courses_application`/`headhunter_hhnegotiationrecord`, `CheckConstraint` якоря, self-FK
+  `superseded_by_id → ai_candidate_profile.id` (`ondelete='SET NULL'`) — добавлен сверх
+  черновика в шаге, т.к. модель E2-02 эту колонку требует. `-x sqlalchemy.url=...` на
+  SQLite не сработал (тот же баг env.py, что в E1-05) — использован `alembic upgrade
+  head --sql`, DDL проверен визуально, ошибок нет. Реальное применение на прод — E2-07.
+  Коммит `2ba937c`. Эпик E2 не завершён — дальше `step-E2-04-resolve-or-create.md`.
+- `2026-08-26` — шаг `step-E2-02-candidate-profile-model.md` выполнен: модель
+  `CandidateProfile` (`src/sfera_ai/models/candidate_profile.py`) — оба FK-якоря
+  (`application_id`, `hh_negotiation_id`) простые `Integer`, unique, nullable, без
+  `ForeignKey()` (платформенные таблицы только reflected); `CheckConstraint` — хотя бы
+  один якорь заполнен. Тест `tests/models/test_candidate_profile.py` — 3 passed, полный
+  сьют 14 passed, регрессий нет. Коммит `240ad27`. Эпик E2 не завершён — дальше
+  `step-E2-03-alembic-revision-0002.md`.
+- `2026-08-26` — шаг `step-E2-01-extend-reflection.md` выполнен: тест
+  `test_reflect_platform_tables_includes_hh_negotiation_record` добавлен
+  (`tests/test_platform_db.py`), прошёл без изменений функции — `reflect_platform_tables`
+  уже общая. Добавлена константа `IDENTITY_RESOLVER_TABLES = ("courses_application",
+  "headhunter_hhnegotiationrecord")` в `src/sfera_ai/platform_db.py`. `uv run pytest
+  tests/test_platform_db.py -v` — 2 passed. Коммит `11c238b`. Эпик E2 не завершён —
+  дальше следующие шаги эпика (см. `05_EPICS.md`/`epics/E2-candidate-identity-resolver/`).
 - `2026-08-26` — шаг `step-E1-10-state-update.md` выполнен: эпик E1 (`VacancyProfile`)
   реализован — модель, Alembic 0001, versioning-сервис, CLI. Доска статусов: `E1-01`
   отмечен `DONE`. Следующий шаг — эпик E2 (`CandidateProfile` identity resolver).

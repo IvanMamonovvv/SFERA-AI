@@ -1,6 +1,6 @@
 # Шаг E2-01 — Расширить reflection-набор платформенных таблиц
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0 (`platform_db.py`), E1 (Alembic-паттерн)
 **Перед началом:** резолверу identity нужна ещё `headhunter_hhnegotiationrecord` (для
 проверки обратной связи `application` при защите от гонки).
@@ -68,7 +68,7 @@ git commit -m "feat: extend platform reflection to headhunter_hhnegotiationrecor
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/test_platform_db.py -v` зелёный
+- [x] `uv run pytest tests/test_platform_db.py -v` зелёный
 
 ## Как проверить
 
@@ -82,4 +82,4 @@ uv run pytest tests/test_platform_db.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — тест добавлен, зелёный без изменений функции; добавлена константа `IDENTITY_RESOLVER_TABLES`. Commit `11c238b`.
