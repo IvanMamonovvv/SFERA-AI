@@ -4,9 +4,8 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-05-smoke-test.md`
-выполнен частично: `src/sfera_ai/smoke_test.py` готов; ручной прогон на реальном проде
-НЕ выполнен (нужны туннель + подтверждённая роль `ai_readonly`).
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-06-dockerfile.md` выполнен:
+`Dockerfile` + `.dockerignore` готовы, `docker build` проходит без ошибок.
 
 ## Внешние гейты / блокеры
 
@@ -21,12 +20,12 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-06-dockerfile.md` (см. `05_EPICS.md`, эпик E0) —
-шаг 6 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
-подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах платформы,
-smoke-test чтения одной реальной записи `Application`; ничего не пишется, только
-чтение). Шаги 1-5 выполнены (E0-04 и E0-05 — частично: код готов, реальный прогон на
-проде отложен до подтверждения роли `ai_readonly`, см. блокер выше и журнал).
+`epics/E0-service-bootstrap/step-E0-07-shared-docker-network.md` (см. `05_EPICS.md`,
+эпик E0) — шаг 7 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса,
+`Dockerfile`, подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах
+платформы, smoke-test чтения одной реальной записи `Application`; ничего не пишется,
+только чтение). Шаги 1-6 выполнены (E0-04 и E0-05 — частично: код готов, реальный
+прогон на проде отложен до подтверждения роли `ai_readonly`, см. блокер выше и журнал).
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -38,7 +37,7 @@ smoke-test чтения одной реальной записи `Application`; 
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-5/8: scaffold, env-config, reflection, tunnel, smoke-test код — DONE, ручной прогон на проде отложен) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-6/8: scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile — DONE, ручной прогон на проде отложен) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -51,6 +50,12 @@ smoke-test чтения одной реальной записи `Application`; 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-06-dockerfile.md` выполнен: `Dockerfile` (multi-stage, uv)
+  + `.dockerignore` созданы. При сборке всплыл баг: `pyproject.toml` объявляет
+  `readme = "README.md"`, но README.md не копировался до финального `uv sync --frozen
+  --no-dev`, сборка падала на `Building sfera-ai @ file:///app` с `failed to open file
+  /app/README.md`. Исправлено — README.md добавлен в первый `COPY`. После фикса
+  `docker build -t sfera-ai:bootstrap .` проходит без ошибок. Коммит `99908c2`.
 - `2026-08-26` — шаг `step-E0-05-smoke-test.md` выполнен частично: `src/sfera_ai/smoke_test.py`
   реализован (читает `Application` по id, проверяет что write через `ai_readonly` падает
   с `DBAPIError`). Коммит `721dc6f`. **Не выполнено:** ручной прогон на реальном проде —
