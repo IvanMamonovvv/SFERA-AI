@@ -4,9 +4,9 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-02-env-config.md`
-выполнен: `Settings` (pydantic-settings) читает `PLATFORM_DATABASE_URL`, тест зелёный,
-`.env.example` создан.
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-03-reflection-module.md`
+выполнен: `reflect_platform_tables` (SQLAlchemy automap, ограничен `only=[...]`) готов,
+тест зелёный.
 
 ## Внешние гейты / блокеры
 
@@ -15,12 +15,12 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-03-reflection-module.md` (см. `05_EPICS.md`, эпик E0) —
-шаг 3 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
+`epics/E0-service-bootstrap/step-E0-04-ssh-tunnel.md` (см. `05_EPICS.md`, эпик E0) —
+шаг 4 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
 подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах платформы,
 smoke-test чтения одной реальной записи `Application`; ничего не пишется, только
-чтение). Шаги 1 (`step-E0-01-project-scaffold.md`) и 2 (`step-E0-02-env-config.md`)
-выполнены.
+чтение). Шаги 1-3 (`step-E0-01-project-scaffold.md`, `step-E0-02-env-config.md`,
+`step-E0-03-reflection-module.md`) выполнены.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -32,7 +32,7 @@ smoke-test чтения одной реальной записи `Application`; 
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-2/8: scaffold, env-config — DONE) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-3/8: scaffold, env-config, reflection — DONE) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -45,6 +45,10 @@ smoke-test чтения одной реальной записи `Application`; 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-03-reflection-module.md` выполнен: `reflect_platform_tables`
+  (SQLAlchemy automap, `MetaData.reflect(only=[...])`) ограничен переданным списком
+  таблиц, тест `tests/test_platform_db.py` зелёный (sqlite in-memory, без реальной БД).
+  Коммит `4cbcfb4` (смешан с docs-правками предыдущего шага — не критично).
 - `2026-08-26` — шаг `step-E0-02-env-config.md` выполнен: `Settings` (pydantic-settings)
   читает `PLATFORM_DATABASE_URL` из окружения/`.env`, тест `tests/test_config.py`
   зелёный, `.env.example` создан (плейсхолдеры, без реального пароля). Коммит `5522817`.
