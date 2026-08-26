@@ -46,6 +46,12 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E2-05-transition.md` выполнен: `promote_hh_lead_to_application`
+  (`src/sfera_ai/services/candidate_transition.py`) — одна `UPDATE` строка по
+  `hh_negotiation_id` с условием `application_id IS NULL`, без `INSERT`; возвращает
+  `bool` (была ли строка обновлена). Тест `tests/services/test_candidate_transition.py`
+  — 2 passed, без изменений от черновика в шаге. Коммит `71ef56a`. Эпик E2 не
+  завершён — дальше следующие шаги (`epics/E2-candidate-identity-resolver/`).
 - `2026-08-26` — шаг `step-E2-04-resolve-or-create.md` выполнен:
   `resolve_or_create_candidate_profile` (`src/sfera_ai/services/candidate_identity.py`) —
   два входа `NEW_HH_LEAD`/`NEW_APPLICATION`, для `NEW_APPLICATION` проверяет через
