@@ -4,11 +4,8 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0 (bootstrap) полностью реализован и
-проверен на проде: uv-проект, env-конфиг, reflection, smoke-test, Dockerfile, общая
-docker-сеть `ai_shared`, роль `ai_readonly` создана и подтверждена реальным прогоном
-(read работает, write падает `permission denied`). Следующий шаг — эпик E1
-(`VacancyProfile`).
+**Последнее обновление:** `2026-08-26` — эпик E1 продолжен: `step-E1-04-vacancy-profile-model.md`
+выполнен (модель `VacancyProfile`). Следующий шаг — `step-E1-05` (Alembic-миграция таблицы).
 
 ## Внешние гейты / блокеры
 
@@ -46,6 +43,24 @@ docker-сеть `ai_shared`, роль `ai_readonly` создана и подтв
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E1-04-vacancy-profile-model.md` выполнен: модель `VacancyProfile`
+  (`src/sfera_ai/models/vacancy_profile.py`) — поля по TDD, `UniqueConstraint(course_id,
+  version)`, `course_id` — простой `Mapped[int]` без `ForeignKey` (FK-констрейнт будет в
+  Alembic-миграции E1-05 через raw DDL). Тест шага скорректирован: добавлен `updated_at` в
+  ожидаемые columns (`TimestampMixin` даёт `created_at`+`updated_at` вместе, отдельного
+  created_at-only варианта нет) — решение согласовано с владельцем. `uv run pytest` — 6
+  passed, регрессий нет.
+- `2026-08-26` — эпик E1 начат: `step-E1-02-write-database-url.md` и
+  `step-E1-03-declarative-base.md` выполнены первыми (`step-E1-01-alembic-init.md`
+  фактически зависит от них), затем `step-E1-01-alembic-init.md` (код). `Settings`
+  получил `write_database_url`, добавлены `sfera_ai/db/base.py` (`Base`,
+  `TimestampMixin`), alembic инициализирован (`env.py` читает `Settings`/`Base`).
+  Коммиты `7586075`, `ef4cc07`, `ac26c0a`. `.env.example` не обновлён — под глобальным
+  запретом чтения/правки агента, владелец добавит `WRITE_DATABASE_URL` сам. Проверка
+  `uv run alembic current` пройдена на разовом локальном Postgres (Docker, порт 5434,
+  снесён после теста) — не прод. Шаги `E1-01`/`E1-02`/`E1-03` отмечены `DONE` в своих
+  step-файлах. Реальный `WRITE_DATABASE_URL` для прода (роль `ai_owner`) — на шаге
+  `E1-09`, отдельная прод-операция с явным разрешением владельца.
 - `2026-08-26` — реальный прогон E0-04/E0-05 на проде выполнен (владелец дал явное
   разрешение на прод-операцию). Перед изменением схемы снят полный `pg_dump -Fc` бэкап
   `sfera_db` (сохранён локально в `.../scratchpad/backups/`, временная копия на VPS

@@ -1,6 +1,6 @@
 # Шаг E1-04 — `VacancyProfile` модель
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-03
 **Перед началом:** прочитай `03_TDD.md`, раздел «2. Сущности / данные». `course_id` —
 обычный Integer, FK-констрейнт на `courses_course.id` создаётся в Alembic-миграции
@@ -109,4 +109,8 @@ uv run pytest tests/models/test_vacancy_profile.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — модель `VacancyProfile` реализована по шагу; тест из Step 1 скорректирован
+  (добавлен `updated_at` в ожидаемые columns — `TimestampMixin` даёт `created_at` и
+  `updated_at` вместе, отдельного created_at-only варианта миксин не имеет; решение
+  согласовано с владельцем). `uv run pytest tests/models/test_vacancy_profile.py -v` — 2 passed.
+  Полный прогон `uv run pytest` — 6 passed, регрессий нет.
