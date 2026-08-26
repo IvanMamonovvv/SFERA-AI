@@ -1,0 +1,26 @@
+[project]
+name = "sfera-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Vladislav Proskurkin", email = "proskurkin-va@zvuk.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "pydantic-settings>=2.5",
+    "sqlalchemy>=2.0",
+]
+
+[project.scripts]
+sfera-ai = "sfera_ai:main"
+
+[build-system]
+requires = ["uv_build>=0.12.6,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

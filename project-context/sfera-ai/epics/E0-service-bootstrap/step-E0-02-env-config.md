@@ -1,6 +1,6 @@
 # Шаг E0-02 — Env-конфиг (pydantic-settings)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0-01
 
 ## Цель
@@ -70,7 +70,7 @@ git commit -m "feat: add env-based settings for platform DB connection"
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/test_config.py -v` зелёный
+- [x] `uv run pytest tests/test_config.py -v` зелёный
 
 ## Как проверить
 
@@ -84,4 +84,4 @@ uv run pytest tests/test_config.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — реализован `Settings` (pydantic-settings), тест `tests/test_config.py` зелёный, создан `.env.example`, коммит `5522817`.
