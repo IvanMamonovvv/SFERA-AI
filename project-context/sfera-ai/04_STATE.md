@@ -46,6 +46,15 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E2-03-alembic-revision-0002.md` выполнен: ревизия
+  `migrations/versions/0002_ai_candidate_profile.py` (`down_revision='0001'`) — таблица
+  `ai_candidate_profile` с двумя FK (`ondelete='CASCADE'`) на
+  `courses_application`/`headhunter_hhnegotiationrecord`, `CheckConstraint` якоря, self-FK
+  `superseded_by_id → ai_candidate_profile.id` (`ondelete='SET NULL'`) — добавлен сверх
+  черновика в шаге, т.к. модель E2-02 эту колонку требует. `-x sqlalchemy.url=...` на
+  SQLite не сработал (тот же баг env.py, что в E1-05) — использован `alembic upgrade
+  head --sql`, DDL проверен визуально, ошибок нет. Реальное применение на прод — E2-07.
+  Коммит `2ba937c`. Эпик E2 не завершён — дальше `step-E2-04-resolve-or-create.md`.
 - `2026-08-26` — шаг `step-E2-02-candidate-profile-model.md` выполнен: модель
   `CandidateProfile` (`src/sfera_ai/models/candidate_profile.py`) — оба FK-якоря
   (`application_id`, `hh_negotiation_id`) простые `Integer`, unique, nullable, без
