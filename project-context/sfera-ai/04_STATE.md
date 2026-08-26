@@ -4,23 +4,30 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-03-reflection-module.md`
-выполнен: `reflect_platform_tables` (SQLAlchemy automap, ограничен `only=[...]`) готов,
-тест зелёный.
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-04-ssh-tunnel.md`
+выполнен частично: скрипт туннеля и `docs/LOCAL_DEV.md` готовы; создание роли
+`ai_readonly` на проде НЕ сделано (вне доступа агента, нужен владелец).
 
 ## Внешние гейты / блокеры
 
-Нет активных блокеров. 6 открытых вопросов (`02_CONTEXT.md`) — ни один не блокирует
-старт разработки, решаются по ходу, на своих шагах реализации.
+**Блокер перед E0-05:** роль `ai_readonly` должна быть реально создана на прод-Postgres
+(DDL — `epics/E0-service-bootstrap/step-E0-04-ssh-tunnel.md`, раздел «Предпосылки»).
+Требует владельца или агента с явным разрешением на прод-БД — вне доступа обычного
+агента этого репозитория.
+
+6 открытых вопросов (`02_CONTEXT.md`) — ни один не блокирует старт разработки,
+решаются по ходу, на своих шагах реализации.
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-04-ssh-tunnel.md` (см. `05_EPICS.md`, эпик E0) —
-шаг 4 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
+`epics/E0-service-bootstrap/step-E0-05-smoke-test.md` (см. `05_EPICS.md`, эпик E0) —
+шаг 5 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса, `Dockerfile`,
 подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах платформы,
 smoke-test чтения одной реальной записи `Application`; ничего не пишется, только
-чтение). Шаги 1-3 (`step-E0-01-project-scaffold.md`, `step-E0-02-env-config.md`,
-`step-E0-03-reflection-module.md`) выполнены.
+чтение). **Перед началом E0-05 нужна реально созданная роль `ai_readonly` на проде**
+(см. блокер выше) — сверить перед стартом. Шаги 1-4 (`step-E0-01-project-scaffold.md`,
+`step-E0-02-env-config.md`, `step-E0-03-reflection-module.md`,
+`step-E0-04-ssh-tunnel.md`) выполнены (E0-04 — частично, см. журнал).
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -32,7 +39,7 @@ smoke-test чтения одной реальной записи `Application`; 
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-3/8: scaffold, env-config, reflection — DONE) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-4/8: scaffold, env-config, reflection, tunnel — DONE, роль ai_readonly на проде не создана) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -45,6 +52,12 @@ smoke-test чтения одной реальной записи `Application`; 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-04-ssh-tunnel.md` выполнен частично: `scripts/tunnel-platform-db.sh`
+  и `docs/LOCAL_DEV.md` готовы. Т.к. `03_TDD.md` фиксирует общую docker-сеть `ai_shared`
+  без публикации `db` на host VPS, туннель — в два прыжка: временный socat-proxy
+  контейнер в `ai_shared` на VPS + `ssh -L` поверх него (владелец подтвердил вариант).
+  Коммит `d6a140e`. **Не сделано:** создание роли `ai_readonly` на прод-Postgres (DDL
+  в step-файле) — вне доступа агента, требует владельца перед стартом E0-05.
 - `2026-08-26` — шаг `step-E0-03-reflection-module.md` выполнен: `reflect_platform_tables`
   (SQLAlchemy automap, `MetaData.reflect(only=[...])`) ограничен переданным списком
   таблиц, тест `tests/test_platform_db.py` зелёный (sqlite in-memory, без реальной БД).
