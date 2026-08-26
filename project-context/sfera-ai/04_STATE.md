@@ -46,6 +46,13 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E2-02-candidate-profile-model.md` выполнен: модель
+  `CandidateProfile` (`src/sfera_ai/models/candidate_profile.py`) — оба FK-якоря
+  (`application_id`, `hh_negotiation_id`) простые `Integer`, unique, nullable, без
+  `ForeignKey()` (платформенные таблицы только reflected); `CheckConstraint` — хотя бы
+  один якорь заполнен. Тест `tests/models/test_candidate_profile.py` — 3 passed, полный
+  сьют 14 passed, регрессий нет. Коммит `240ad27`. Эпик E2 не завершён — дальше
+  `step-E2-03-alembic-revision-0002.md`.
 - `2026-08-26` — шаг `step-E2-01-extend-reflection.md` выполнен: тест
   `test_reflect_platform_tables_includes_hh_negotiation_record` добавлен
   (`tests/test_platform_db.py`), прошёл без изменений функции — `reflect_platform_tables`
