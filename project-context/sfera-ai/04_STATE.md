@@ -4,9 +4,11 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E1 (`VacancyProfile`) завершён — модель,
-Alembic 0001, versioning-сервис, CLI, миграция применена на проде. Следующий шаг —
-эпик **E2** (`CandidateProfile` identity resolver), см. `05_EPICS.md`.
+**Последнее обновление:** `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver)
+завершён — модель, Alembic 0002, `resolve_or_create_candidate_profile` с защитой от
+гонки, `promote_hh_lead_to_application`, backfill-скрипт, миграция и backfill реально
+прогнаны на проде (3461 профиль). Следующий шаг — эпик **E3** (`ResumeExtract`
+пайплайн), см. `05_EPICS.md`.
 
 ## Внешние гейты / блокеры
 
@@ -18,10 +20,9 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Текущий следующий шаг
 
-Эпик E0 (bootstrap) и эпик E1 (`VacancyProfile`) полностью завершены, включая реальный
-прогон на проде. Следующий шаг — эпик **E2** (`CandidateProfile` identity resolver,
-`03_TDD.md`, раздел «Candidate Identity — переход HH Lead → Platform Candidate»), см.
-`05_EPICS.md`.
+Эпики E0 (bootstrap), E1 (`VacancyProfile`) и E2 (`CandidateProfile` identity resolver)
+полностью завершены, включая реальный прогон на проде. Следующий шаг — эпик **E3**
+(`ResumeExtract` пайплайн, `03_TDD.md`, раздел «Resume Pipeline»), см. `05_EPICS.md`.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -35,7 +36,7 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
 | E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть, роль `ai_readonly` создана, прогон на проде подтверждён) | DONE | 2026-08-26 |
 | E1-01 | `VacancyProfile` модель + CRUD | DONE | 2026-08-26 |
-| E2-01 | `CandidateProfile` identity resolver | TODO | — |
+| E2-01 | `CandidateProfile` identity resolver | DONE | 2026-08-26 |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
 | E4-01 | Интеграция с `TranscriptionJob` | TODO | — |
 | E5-01 | `AIProcessingJob` + очередь (dry-run) | TODO | — |
@@ -46,6 +47,19 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver) реализован — модель,
+  Alembic 0002, `resolve_or_create_candidate_profile` с защитой от гонки,
+  `promote_hh_lead_to_application`, backfill-скрипт. Миграция и backfill реально
+  прогнаны на проде (`step-E2-07-apply-migration-prod.md`) — таблица
+  `ai_candidate_profile` создана, 3461 профиль (3310 с HH-привязкой, 1270 с
+  заявкой, 1119 пересечений корректно слиты). По пути на проде исправлены три
+  инфраструктурные проблемы, не связанные с кодом самой миграции: контейнер БД
+  отключился от сети `ai_shared` (переподключён), в `.env` разработчика были
+  плейсхолдеры вместо реальных прод-паролей (пароли `ai_owner`/`ai_readonly`
+  сброшены заново), не хватало `GRANT REFERENCES`/`GRANT SELECT` на таблицы
+  платформы для служебных ролей AI-сервиса (выданы). Детали — журнал
+  `step-E2-07-apply-migration-prod.md`. Доска статусов: `E2-01` отмечен `DONE`.
+  Следующий шаг — эпик E3 (`ResumeExtract` пайплайн).
 - `2026-08-26` — шаг `step-E2-05-transition.md` выполнен: `promote_hh_lead_to_application`
   (`src/sfera_ai/services/candidate_transition.py`) — одна `UPDATE` строка по
   `hh_negotiation_id` с условием `application_id IS NULL`, без `INSERT`; возвращает
