@@ -4,8 +4,11 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-06-dockerfile.md` выполнен:
-`Dockerfile` + `.dockerignore` готовы, `docker build` проходит без ошибок.
+**Последнее обновление:** `2026-08-26` — эпик E0, шаг `step-E0-07-shared-docker-network.md`
+выполнен: `ai_shared` docker-сеть создана на VPS, `db` backend'а подключён к ней,
+`docker-compose.yml` AI-сервиса готов. Backend/scheduler живы (был кратковременный
+инцидент с `scheduler` после пересоздания `db` — устранён рестартом, детали в
+журнале шага).
 
 ## Внешние гейты / блокеры
 
@@ -20,12 +23,10 @@
 
 ## Текущий следующий шаг
 
-`epics/E0-service-bootstrap/step-E0-07-shared-docker-network.md` (см. `05_EPICS.md`,
-эпик E0) — шаг 7 из 8 подробного task-by-task разбора эпика E0 (bootstrap сервиса,
-`Dockerfile`, подключение к БД через SQLAlchemy `automap` reflection на 2-3 таблицах
-платформы, smoke-test чтения одной реальной записи `Application`; ничего не пишется,
-только чтение). Шаги 1-6 выполнены (E0-04 и E0-05 — частично: код готов, реальный
-прогон на проде отложен до подтверждения роли `ai_readonly`, см. блокер выше и журнал).
+`epics/E0-service-bootstrap/step-E0-08-state-update.md` (см. `05_EPICS.md`, эпик E0) —
+последний, 8 из 8, шаг эпика E0 (финальное обновление `04_STATE.md` по итогам bootstrap).
+Шаги 1-7 выполнены (E0-04 и E0-05 — частично: код готов, реальный прогон на проде
+отложен до подтверждения роли `ai_readonly`, см. блокер выше и журнал).
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -37,7 +38,7 @@
 | — | Архитектура (единый `ARCHITECTURE.md`, до реструктуризации) | DONE | 2026-08-21 |
 | — | Решение об отдельном сервисе/репозитории | DONE | 2026-08-25 |
 | — | Реструктуризация плана в PRD/CONTEXT/TDD/EPICS/STATE | DONE | 2026-08-25 |
-| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-6/8: scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile — DONE, ручной прогон на проде отложен) | TODO | — |
+| E0-01 | Bootstrap сервиса + reflection smoke-test (шаги 1-7/8: scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть — DONE, ручной прогон на проде отложен) | TODO | — |
 | E1-01 | `VacancyProfile` модель + CRUD | TODO | — |
 | E2-01 | `CandidateProfile` identity resolver | TODO | — |
 | E3-01 | `ResumeExtract` пайплайн | TODO | — |
@@ -50,6 +51,19 @@
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E0-07-shared-docker-network.md` выполнен. Владелец дал
+  SSH-доступ к VPS и подтвердил прод-операцию отдельно от общего согласия 2026-08-25.
+  На VPS: `docker network create ai_shared`, `db` backend'а подключён к ней (правка
+  `docker-compose.staging.yml` в `sfera_backend`, коммит `e22bf9b`, запушено в
+  `origin/main` после rebase на чужой коммит `edfc20f`). **Инцидент:** после
+  пересоздания `db` контейнер `scheduler` не восстановил закэшированное Django DB-
+  соединение (`OperationalError: server closed the connection unexpectedly` каждые
+  15-30с) — DNS и свежие соединения работали нормально, проблема только в уже открытом
+  соединении долгоживущего процесса; исправлено `docker compose restart scheduler`,
+  дальше без ошибок. `backend`/`gateway` не пострадали (HTTP 200 всё время). Сетевая
+  связность подтверждена: `pg_isready -h db` из контейнера на `ai_shared` → OK.
+  `docker-compose.yml` AI-сервиса создан в `SFERA-AI`, коммит `df01000`. Полный разбор
+  инцидента — в журнале `step-E0-07-shared-docker-network.md`.
 - `2026-08-26` — шаг `step-E0-06-dockerfile.md` выполнен: `Dockerfile` (multi-stage, uv)
   + `.dockerignore` созданы. При сборке всплыл баг: `pyproject.toml` объявляет
   `readme = "README.md"`, но README.md не копировался до финального `uv sync --frozen
