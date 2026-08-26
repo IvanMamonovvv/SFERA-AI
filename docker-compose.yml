@@ -1,0 +1,11 @@
+services:
+  ai-service:
+    build: .
+    env_file: .env
+    networks:
+      - ai_shared
+
+networks:
+  ai_shared:
+    name: ai_shared
+    external: true
