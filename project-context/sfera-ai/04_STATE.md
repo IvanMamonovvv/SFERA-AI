@@ -46,6 +46,13 @@ Alembic 0001, versioning-сервис, CLI, миграция применена 
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-26` — шаг `step-E2-01-extend-reflection.md` выполнен: тест
+  `test_reflect_platform_tables_includes_hh_negotiation_record` добавлен
+  (`tests/test_platform_db.py`), прошёл без изменений функции — `reflect_platform_tables`
+  уже общая. Добавлена константа `IDENTITY_RESOLVER_TABLES = ("courses_application",
+  "headhunter_hhnegotiationrecord")` в `src/sfera_ai/platform_db.py`. `uv run pytest
+  tests/test_platform_db.py -v` — 2 passed. Коммит `11c238b`. Эпик E2 не завершён —
+  дальше следующие шаги эпика (см. `05_EPICS.md`/`epics/E2-candidate-identity-resolver/`).
 - `2026-08-26` — шаг `step-E1-10-state-update.md` выполнен: эпик E1 (`VacancyProfile`)
   реализован — модель, Alembic 0001, versioning-сервис, CLI. Доска статусов: `E1-01`
   отмечен `DONE`. Следующий шаг — эпик E2 (`CandidateProfile` identity resolver).
