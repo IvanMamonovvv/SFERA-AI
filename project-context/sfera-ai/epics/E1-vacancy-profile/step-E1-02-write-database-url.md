@@ -1,6 +1,6 @@
 # Шаг E1-02 — Settings: добавить `write_database_url`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-01
 
 ## Цель
@@ -76,4 +76,8 @@ uv run pytest tests/test_config.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — выполнено: `write_database_url` добавлен в `Settings`, тест
+  `test_settings_reads_write_database_url` зелёный. **Не сделано:** `.env.example` не
+  обновлён — файл под глобальным запретом чтения/правки `.env*`, владелец добавит строку
+  `WRITE_DATABASE_URL=postgresql+psycopg://ai_owner:CHANGE_ME@localhost:5433/CHANGE_ME`
+  сам. Коммит `7586075`.

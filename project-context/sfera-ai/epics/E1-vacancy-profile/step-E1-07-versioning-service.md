@@ -1,6 +1,6 @@
 # Шаг E1-07 — Versioning-сервис
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-04, E1-06
 **Перед началом:** «Никогда не UPDATE `requirements` у существующей версии»
 (`03_TDD.md`, раздел «2. Сущности / данные») — сервис только создаёт новые строки и
@@ -133,4 +133,4 @@ uv run pytest tests/services/test_vacancy_profile.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-26 — `create_vacancy_profile_version` реализован, тесты `tests/services/test_vacancy_profile.py` зелёные (2 passed), полный сьют 9 passed. Коммит `20ade28`.
