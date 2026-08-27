@@ -1,0 +1,62 @@
+from sqlalchemy.orm import Session
+
+from sfera_ai.integrations.hh_client import HHClient, HHClientError
+from sfera_ai.models.candidate_profile import CandidateProfile
+from sfera_ai.models.resume_extract import ResumeExtract
+
+PLATFORM_ANSWER_TABLE = "testchecks_answer"
+
+
+class ResumeFetchError(Exception):
+    """Файл резюме не удалось получить (сеть, 404, отсутствующий Answer)."""
+
+
+def _fetch_anketa_file(extract: ResumeExtract, *, platform_base, s3_client, s3_bucket: str) -> bytes:
+    Answer = platform_base.classes.testchecks_answer
+    with Session(platform_base.engine) as platform_session:
+        answer = platform_session.get(Answer, extract.source_answer_id)
+    if answer is None or not answer.file:
+        raise ResumeFetchError(f"testchecks_answer.id={extract.source_answer_id} не найден или без файла")
+    try:
+        response = s3_client.get_object(Bucket=s3_bucket, Key=answer.file)
+        return response["Body"].read()
+    except Exception as exc:
+        raise ResumeFetchError(f"S3 get_object failed for key={answer.file}: {exc}") from exc
+
+
+def _fetch_hh_resume(extract: ResumeExtract, *, session: Session, hh_client: HHClient) -> bytes:
+    profile = session.get(CandidateProfile, extract.candidate_profile_id)
+    if profile is None or profile.hh_negotiation_id is None:
+        raise ResumeFetchError(
+            f"candidate_profile_id={extract.candidate_profile_id} без hh_negotiation_id"
+        )
+    try:
+        return hh_client.get_resume_pdf(profile.hh_negotiation_id)
+    except HHClientError as exc:
+        raise ResumeFetchError(str(exc)) from exc
+
+
+def fetch_resume_bytes(
+    extract: ResumeExtract,
+    *,
+    session: Session,
+    platform_base,
+    hh_client: HHClient,
+    s3_client,
+    s3_bucket: str,
+) -> bytes | None:
+    """Диспетчер по `source_type`. При ошибке переводит `extract` в `FAILED` с текстом
+    ошибки и возвращает `None` — не бросает исключение наружу (03_TDD.md, «Failure
+    Scenarios»: HH API недоступен / битый resume → FAILED, не блокирует остальной
+    пайплайн)."""
+    try:
+        if extract.source_type == "ANKETA_FILE":
+            return _fetch_anketa_file(extract, platform_base=platform_base, s3_client=s3_client, s3_bucket=s3_bucket)
+        if extract.source_type == "HH_RESUME":
+            return _fetch_hh_resume(extract, session=session, hh_client=hh_client)
+        raise ResumeFetchError(f"неизвестный source_type: {extract.source_type}")
+    except ResumeFetchError as exc:
+        extract.status = "FAILED"
+        extract.error = str(exc)
+        session.commit()
+        return None

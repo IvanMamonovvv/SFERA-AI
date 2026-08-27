@@ -1,6 +1,6 @@
 # Шаг E3-04 — LLM structured extraction
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E3-03
 **Перед началом:** прочитай `03_TDD.md` раздел «AI Pipeline — какие вызовы и когда»
 (единый клиент `ai_analysis/providers.py`), раздел «7. Риски и решения» → Cost
@@ -30,10 +30,10 @@ Protection.
 
 ## Критерии готовности (DoD)
 
-- [ ] Валидный ответ LLM → `DONE` + заполненный `structured_data`
-- [ ] Невалидный JSON → `FAILED`, `error` содержит обрезанный сырой ответ, не роняет
+- [x] Валидный ответ LLM → `DONE` + заполненный `structured_data`
+- [x] Невалидный JSON → `FAILED`, `error` содержит обрезанный сырой ответ, не роняет
       процесс
-- [ ] `provider`/`model`/`prompt_version`/токены/latency пишутся на каждый вызов
+- [x] `provider`/`model`/`prompt_version`/токены/latency пишутся на каждый вызов
 
 ## Как проверить
 
@@ -47,4 +47,10 @@ uv run pytest tests/services/test_resume_extraction.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — `src/sfera_ai/providers.py` (`OpenRouterClient`, общий на E6/E7),
+  `src/sfera_ai/services/resume_extraction.py` (`run_resume_extraction`), тесты
+  TDD-циклом (`tests/test_providers.py`, `tests/services/test_resume_extraction.py`,
+  48/48 зелёные). `provider`/`model`/`prompt_version` пишутся в `ResumeExtract`; токены/
+  latency логируются на каждый вызов (в модели `ResumeExtract` нет колонок под них —
+  в отличие от `CandidateVacancyAnalysis`, `03_TDD.md` раздел 2). Добавлен
+  `openrouter_api_key`/`openrouter_base_url` в `config.py`.

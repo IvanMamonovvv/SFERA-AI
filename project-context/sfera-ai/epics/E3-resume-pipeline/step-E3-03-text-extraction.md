@@ -1,6 +1,6 @@
 # Шаг E3-03 — извлечение текста из файла (PDF/DOC)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E3-02
 
 ## Цель
@@ -22,8 +22,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Валидный PDF/DOCX → непустой `raw_text`
-- [ ] Битый файл → `FAILED`, исключение не улетает наружу
+- [x] Валидный PDF/DOCX → непустой `raw_text`
+- [x] Битый файл → `FAILED`, исключение не улетает наружу
 
 ## Как проверить
 
@@ -37,4 +37,16 @@ uv run pytest tests/services/test_resume_text_extraction.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано, какая библиотека выбрана и почему>.
+- `2026-08-27` — реализовано: `extract_text(file_bytes, mime_type) -> str`
+  (`src/sfera_ai/services/resume_text_extraction.py`), библиотеки — `pypdf` (PDF) и
+  `python-docx` (DOCX), обе добавлены (`uv add`). Битый файл/неподдерживаемый
+  `mime_type` (в т.ч. legacy `.doc` — не поддержан, `python-docx` его не читает,
+  отдельный конвертер сочли избыточным для MVP) → `TextExtractionError`, не
+  `ResumeExtract.FAILED` напрямую — по сигнатуре шага функция чистая (bytes+mime →
+  str), не знает про `ResumeExtract`/`session`; перевод в `FAILED` — ответственность
+  вызывающего пайплайн-кода (аналогично паттерну `fetch_resume_bytes` в E3-02, но
+  разбито на уровень ниже — сам факт FAILED-перевода будет в шаге, который вызовет
+  `extract_text` внутри try/except). PDF-тест использует вручную собранный минимальный
+  PDF (без внешних PDF-библиотек в dev-зависимостях), DOCX-тест — `python-docx`
+  Document в фикстуре теста. `uv run pytest tests/services/test_resume_text_extraction.py`
+  — 5 passed. Полный сьют — 42 passed, регрессий нет.

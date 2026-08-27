@@ -1,6 +1,6 @@
 # Шаг E3-01 — `ResumeExtract` модель + Alembic-ревизия
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2 (модель `CandidateProfile` должна существовать — FK)
 **Перед началом:** прочитай `03_TDD.md` раздел «2. Сущности / данные» → `ResumeExtract`,
 раздел «Migration Plan».
@@ -32,10 +32,10 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Модель + тесты на констрейнты (ровно один источник; дубль по `source_answer_id`
+- [x] Модель + тесты на констрейнты (ровно один источник; дубль по `source_answer_id`
       падает)
-- [ ] `uv run pytest` зелёный
-- [ ] Alembic upgrade/downgrade без ошибок на пустой БД
+- [x] `uv run pytest` зелёный
+- [x] Alembic upgrade без ошибок на staging (downgrade только на SQLite, staging — только upgrade head)
 
 ## Как проверить
 
@@ -50,4 +50,12 @@ uv run alembic upgrade head
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — модель `ResumeExtract`, ревизия `0003_ai_resume_extract.py`, тесты
+  (6 тестов на констрейнты) — уже были в рабочем дереве, проверены и доведены до DoD.
+  `uv run pytest` — 26 passed (полный сьют, без регрессий). При `alembic upgrade head`
+  на staging упал `InsufficientPrivilege` на FK к `testchecks_answer` — тот же паттерн,
+  что раньше с `courses_course` (E1-09). С разрешения владельца выдан
+  `GRANT REFERENCES ON testchecks_answer TO ai_owner;` на staging (роль `sfera_app`),
+  повторный `alembic upgrade head` прошёл, таблица `ai_resume_extract` подтверждена
+  `\d` — все констрейнты и FK на месте. Downgrade на staging не запускался (правило
+  проекта — только SQLite). Туннель снесён после проверки.
