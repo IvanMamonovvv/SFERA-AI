@@ -1,6 +1,6 @@
 # Шаг E5-01 — `AIProcessingJob` модель + Alembic-ревизия
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1, E2
 **Перед началом:** прочитай `03_TDD.md` раздел «2. Сущности / данные» →
 `AIProcessingJob`, раздел «6. Processing Queue».
@@ -26,8 +26,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Тесты на choices/индекс
-- [ ] Alembic upgrade/downgrade чисто
+- [x] Тесты на choices/индекс
+- [x] Alembic upgrade/downgrade чисто
 
 ## Как проверить
 
@@ -42,4 +42,13 @@ uv run alembic upgrade head
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — модель `AIProcessingJob` (`src/sfera_ai/models/ai_processing_job.py`),
+  ревизия `0004` (`migrations/versions/0004_ai_processing_job.py`), тесты
+  `tests/models/test_ai_processing_job.py`. `course_id` без SQLAlchemy `ForeignKey` в
+  модели (как `VacancyProfile.course_id`) — платформенная таблица `courses_course` не в
+  `Base.metadata`, FK на неё только в raw-миграции. Partial UniqueConstraint
+  `(candidate_profile_id, course_id, reason) WHERE status IN ('PENDING','PROCESSING')`
+  реализован как partial unique index в миграции (аналог `uq_vacancy_profile_course_current`),
+  в ORM-модели не объявлен — SQLite не поддерживает `postgresql_where`. Upgrade head
+  применён на staging через туннель, upgrade+downgrade полного цикла проверен на
+  отдельной SQLite-БД (staging не даунгрейдился).

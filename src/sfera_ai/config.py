@@ -24,3 +24,16 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+
+    # 03_TDD.md, «6. Processing Queue» — снимается только для ограниченного пилота
+    # (step-E6-04-queue-integration.md), по умолчанию True — реальные AI-вызовы выключены.
+    ai_processing_dry_run: bool = True
+    # 2026-08-27 — пересчитано под реальный объём владельца (100-200 кандидатов/сутки,
+    # 3 вакансии × ~400): старое значение 5 (× 3 тика/сутки = 15/сутки) не успевало бы за
+    # притоком, очередь росла бы бесконечно. 200 — на порядок с запасом относительно 200/сутки,
+    # при переходе на реальный AI-вызов (E6-04) пересчитать заново по факту latency LLM.
+    ai_analysis_max_concurrent_jobs: int = 200
+    ai_stuck_job_threshold_hours: int = 2
+    # step-E5-06 — TTL сырого PII резюме hh_negotiation-only лидов (не конвертировались
+    # в Application); значение-заглушка, точное число — согласовать с владельцем перед прод.
+    resume_pii_ttl_days: int = 90

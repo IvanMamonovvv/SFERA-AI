@@ -4,13 +4,33 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-27` — шаг `step-E4-03-facts-adapter.md` выполнен,
-эпик E4 (видео) завершён: `video_facts_from_transcript(job) -> list[dict]`
-(`src/sfera_ai/services/video_facts.py`) — готовый `TranscriptionJob.summary_text` →
-факт-объект по схеме `03_TDD.md` (`key="video_summary"`, `confidence="MEDIUM"`,
-`evidence=[{"source_type": "VIDEO", "source_id": answer_id, "excerpt": summary_text}]`),
-без LLM-вызова и без обращения к видеофайлу/S3. `uv run pytest` — 60 passed, регрессий
-нет. Следующий шаг — эпик E5 (`AIProcessingJob`+очередь).
+**Последнее обновление:** `2026-08-27` — реальный прогон всего эпика E5 на staging
+(владелец попросил проверить, хватит ли текущих лимитов очереди на 100-200 кандидатов/сутки
+по 3 вакансиям ~400 каждая). Три находки:
+1. **Реальный баг** в уже `DONE` шаге `step-E5-02-change-detection.md`:
+   `needs_profile_rebuild` читал несуществующую колонку `updated_at` вместо реальной
+   `modified_at` (Django-модели платформы) — юнит-тесты не ловили, т.к. самодельная
+   SQLite-схема в фикстурах повторяла ту же ошибку, а не реальную схему. Исправлено в
+   `change_detection.py` + тестовых фикстурах (`test_change_detection.py`,
+   `test_job_detection.py`). Детали — журнал `step-E5-02-change-detection.md`.
+2. **Пропускная способность не считалась под реальный объём.** Старый конфиг
+   (`ai_analysis_max_concurrent_jobs=5` × 3 тика/сутки `8,15,19` = 15 джоб/сутки) не
+   успевал бы за притоком 100-200 кандидатов/сутки — очередь росла бы бесконечно.
+   Пересчитано: `ai_analysis_max_concurrent_jobs=200`, тик каждые 30 минут
+   (`CronTrigger(minute="*/30")` вместо фиксированных часов) — запас на порядок.
+   Стоимость реального AI-вызова (E6-04, deньги за LLM) ещё не считалась — промпт
+   fit-scoring не спроектирован; в `step-E6-04-queue-integration.md` добавлен явный
+   пункт «прикинуть токены/цену до снятия dry-run».
+3. Детекция на реальном staging создала 403 `PENDING`-джобы разом (весь бэклог
+   кандидатов без профиля, не только «новые за день») — подтверждает, что первый
+   реальный прогон после долгого простоя даёт вспышку, а не равномерный поток.
+`uv run pytest` — 82 passed после всех правок, регрессий нет. Шаг `step-E5-06-hh-lead-pii-ttl.md`
+(само задание) выполнен отдельно: `purge_expired_hh_lead_resumes(session, ttl_days)` в
+`services/pii_retention.py` — UPDATE (не DELETE) `raw_text`/`structured_data` у
+`ResumeExtract` для `hh_negotiation`-only профилей (`application_id IS NULL`) старше
+`RESUME_PII_TTL_DAYS` (default 90). Отдельный суточный cron `run_pii_retention` в
+`build_scheduler()` (03:00). Эпик E5 всё ещё не завершён — остался
+`step-E5-07-merge-detection.md`.
 
 ## Внешние гейты / блокеры
 
@@ -29,8 +49,9 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Текущий следующий шаг
 
-Эпики E0, E1, E2, E3, E4 завершены. Дальше по графу зависимостей (`05_EPICS.md`) —
-эпик E5 (`AIProcessingJob`+очередь).
+Эпики E0, E1, E2, E3, E4 завершены. Эпик E5 в процессе (`step-E5-01`..`06` выполнены,
+`VACANCY_PROFILE_CHANGED`/`FEEDBACK_APPLIED` осознанно отложены до E6/E7) — дальше
+`step-E5-07-merge-detection.md`.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -57,6 +78,80 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-27` — шаг `step-E5-06-hh-lead-pii-ttl.md` выполнен:
+  `purge_expired_hh_lead_resumes(session, ttl_days)` в `src/sfera_ai/services/pii_retention.py`
+  — `SELECT ... JOIN CandidateProfile WHERE application_id IS NULL AND processed_at <
+  now()-ttl_days`, затем `raw_text=""`/`structured_data={}` в Python (SQLite в тестах
+  не поддерживает bulk-UPDATE-эквивалент из шаблона шага один-в-один, семантика та же —
+  `status`/строка не трогаются). Новая настройка `resume_pii_ttl_days` (default `90`,
+  заглушка — точное число согласовать с владельцем перед прод). Отдельный суточный cron
+  `run_pii_retention` в `build_scheduler()` (`CronTrigger(hour=3, minute=0)`, вне
+  пиковых 8/15/19 тиков). Тесты `tests/services/test_pii_retention.py` — 3 (просроченный
+  hh-lead-only очищен, конвертировавшийся `application_id` не трогается даже если старый,
+  свежий hh-lead-only не трогается). Полный сьют `uv run pytest` — 82 passed, регрессий
+  нет. Эпик E5 не завершён — дальше `step-E5-07-merge-detection.md`.
+- `2026-08-27` — шаг `step-E5-05-stuck-jobs.md` выполнен: `requeue_stuck_jobs(session,
+  threshold_hours)` в `job_processing.py` — `UPDATE ... WHERE status=PROCESSING AND
+  started_at < now()-threshold` → `PENDING`, `attempts += 1`, `started_at = None` (не
+  `FAILED` — не вина джобы). Зарегистрирован отдельным часовым job'ом в
+  `build_scheduler()` (`run_requeue_stuck`, `CronTrigger(minute=0)`, отдельно от
+  3-разового тика). Новая настройка `ai_stuck_job_threshold_hours` (default `2`).
+  Тесты — +2 (зависшая → requeue, свежая не трогается). Полный сьют `uv run pytest` —
+  79 passed, регрессий нет. Инструкция шага «эпик E5 → DONE» неточна — в каталоге ещё
+  есть `step-E5-06-hh-lead-pii-ttl.md`/`step-E5-07-merge-detection.md` (TODO), эпик E5
+  не завершён. Дальше — `step-E5-06-hh-lead-pii-ttl.md`.
+- `2026-08-27` — шаг `step-E5-04-scheduler-dry-run.md` выполнен: `process_batch`
+  (`src/sfera_ai/services/job_processing.py`) — `SELECT ... FOR UPDATE SKIP LOCKED` на
+  `PENDING`-джобы, per-джоба try/except (упавшая не блокирует партию), `_still_relevant`
+  перед закрытием (для `CANDIDATE_DATA_CHANGED` заново `needs_profile_rebuild` из E5-02),
+  `dry_run=True` → `DONE` без реального AI-вызова, `dry_run=False` → `FAILED` с
+  `NotImplementedError` (реальный клиент — E6/E7, не этого шага) + `backoff(attempts)`
+  (5/10/20/40... минут). `src/sfera_ai/scheduler.py` — `run_tick`/`build_scheduler` по
+  скелету `03_TDD.md` (`BackgroundScheduler`, `CronTrigger(hour='8,15,19')`,
+  `max_instances=1`, тик = detection E5-03 + `process_batch`); не покрыт юнит-тестами
+  (обвязка APScheduler), только `import` проверен. Новые настройки в `config.py`:
+  `ai_processing_dry_run` (default `True`), `ai_analysis_max_concurrent_jobs` (default `5`).
+  Зависимость `apscheduler==3.11.3` (`uv add apscheduler`). Тесты
+  `tests/services/test_job_processing.py` — 5 (пустая очередь без AI-вызовов, dry-run →
+  DONE, dry-run выключен → FAILED без тихого прохождения, упавшая джоба не блокирует
+  остальные, экспонента backoff). Полный сьют `uv run pytest` — 77 passed, регрессий нет.
+  Дальше — `step-E5-05-stuck-jobs.md`.
+- `2026-08-27` — шаг `step-E5-03-job-creation.md` выполнен частично:
+  `detect_and_enqueue(session, platform_base)` в `src/sfera_ai/services/job_detection.py`.
+  Реализованы 3 reason: `NEW_HH_LEAD` (новый `headhunter_hhnegotiationrecord` без профиля),
+  `NEW_APPLICATION` (новый `courses_application` без профиля и без связанного HH-лида),
+  `CANDIDATE_DATA_CHANGED` (объединяет `NEW_ANSWER`/`NEW_RESUME`/`NEW_VIDEO` — на уровне
+  детекции доступен только общий bool-флаг `needs_profile_rebuild`, без разбора источника;
+  решение владельца). Конверсия HH-лида в Application — через `promote_hh_lead_to_application`
+  (E2), без отдельной джобы на сам переход. `VACANCY_PROFILE_CHANGED`/`FEEDBACK_APPLIED`
+  отложены — тот же гэп E6/E7, что в `step-E5-02-change-detection.md`. `MANUAL`/`BACKFILL`
+  вне scope детекции. Найден и исправлен баг: без проверки «есть ли уже любая активная
+  джоба у профиля» повторный тик дублировал `CANDIDATE_DATA_CHANGED` поверх свежесозданной
+  `NEW_HH_LEAD` (профиль ещё не пересобран → `sources_snapshot` не совпадает → снова
+  «устарело»); тест `test_no_new_jobs_on_repeat_tick_without_changes` поймал это до коммита.
+  Тесты `tests/services/test_job_detection.py` — 6 passed. Полный сьют `uv run pytest` —
+  72 passed, регрессий нет. Дальше — `step-E5-04-scheduler-dry-run.md`.
+- `2026-08-27` — шаг `step-E5-02-change-detection.md` выполнен частично:
+  `needs_profile_rebuild(platform_base, profile)` в `src/sfera_ai/services/change_detection.py`
+  (+ `CHANGE_DETECTION_TABLES` в `platform_db.py`), тесты `tests/services/test_change_detection.py`
+  (3). `needs_fit_recalc` отложен — зависит от `CandidateVacancyAnalysis` (E6-02) и
+  `VacancyMemory` (E7-01), которых ещё нет в коде; решение владельца — не забегать
+  вперёд по эпикам, реализовать эту функцию на своих шагах E6/E7. Проверено по всем
+  `epics/*` — единственный такой разрыв в графе зависимостей. Полный сьют
+  `uv run pytest` — 66 passed, регрессий нет. Дальше — `step-E5-03-job-creation.md`.
+- `2026-08-27` — шаг `step-E5-01-model-migration.md` выполнен: модель `AIProcessingJob`
+  (`src/sfera_ai/models/ai_processing_job.py`), ревизия `0004`
+  (`migrations/versions/0004_ai_processing_job.py`), тесты
+  `tests/models/test_ai_processing_job.py` (3). `course_id` без SQLAlchemy `ForeignKey`
+  в модели (как у `VacancyProfile.course_id`) — `courses_course` не в `Base.metadata`,
+  FK на неё только в raw-миграции. Partial UniqueConstraint
+  `(candidate_profile_id, course_id, reason) WHERE status IN ('PENDING','PROCESSING')` —
+  partial unique index в миграции (аналог `uq_vacancy_profile_course_current`), не в
+  ORM-модели (SQLite не поддерживает `postgresql_where`). Upgrade head применён на
+  staging через `./scripts/tunnel-platform-db.sh`; полный цикл upgrade+downgrade
+  проверен отдельно на одноразовой SQLite-БД, staging не даунгрейдился.
+  Полный сьют `uv run pytest` — 63 passed, регрессий нет. Эпик E5 не завершён — дальше
+  `step-E5-02-change-detection.md`.
 - `2026-08-27` — шаг `step-E4-03-facts-adapter.md` выполнен, эпик E4 завершён:
   `video_facts_from_transcript(job)` в `services/video_facts.py` — один факт-объект из
   `TranscriptionJob.summary_text` по схеме `03_TDD.md` (`key="video_summary"`,

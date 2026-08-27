@@ -1,6 +1,6 @@
 # Шаг E5-06 — TTL сырого PII резюме для неконвертировавшихся HH-лидов
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E5-05, E3-01 (`ResumeExtract` модель)
 **Перед началом:** прочитай `02_CONTEXT.md` «Решения владельца» (2026-08-26, TTL на
 `raw_text` HH-лидов) и `03_TDD.md`, раздел `ResumeExtract`. Контекст: платформа не может
@@ -48,10 +48,10 @@ N дней (`RESUME_PII_TTL_DAYS`, конфиг) для профилей, кот
 
 ## Критерии готовности (DoD)
 
-- [ ] `raw_text`/`structured_data` очищены для `hh_negotiation`-only профилей старше TTL
-- [ ] Профили с заполненным `application_id` (конвертировавшиеся) не затрагиваются
+- [x] `raw_text`/`structured_data` очищены для `hh_negotiation`-only профилей старше TTL
+- [x] Профили с заполненным `application_id` (конвертировавшиеся) не затрагиваются
       независимо от возраста
-- [ ] `CandidateProfile.facts` не изменяется, `ResumeExtract.status` остаётся `DONE`
+- [x] `CandidateProfile.facts` не изменяется, `ResumeExtract.status` остаётся `DONE`
 
 ## Как проверить
 
@@ -65,4 +65,8 @@ uv run pytest tests/services/test_pii_retention.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-27 — `purge_expired_hh_lead_resumes` (src/sfera_ai/services/pii_retention.py):
+  UPDATE, не DELETE — `raw_text`/`structured_data` очищаются, `status`/строка остаются.
+  Конфиг `RESUME_PII_TTL_DAYS` (default 90, заглушка). Суточный cron в `scheduler.py`
+  (`run_pii_retention`, 03:00, вне пиковых тиков). Тесты — 3/3 (просроченный hh-lead-only,
+  конвертировавшийся application_id, свежий hh-lead-only) — все зелёные.
