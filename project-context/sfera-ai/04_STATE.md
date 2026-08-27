@@ -4,11 +4,18 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver)
-завершён — модель, Alembic 0002, `resolve_or_create_candidate_profile` с защитой от
-гонки, `promote_hh_lead_to_application`, backfill-скрипт, миграция и backfill реально
-прогнаны на проде (3461 профиль). Следующий шаг — эпик **E3** (`ResumeExtract`
-пайплайн), см. `05_EPICS.md`.
+**Последнее обновление:** `2026-08-27` — шаг `step-E3-05-dry-run-cache.md` выполнен,
+эпик E3 (`ResumeExtract` пайплайн) завершён: `process_resume`
+(`src/sfera_ai/services/resume_pipeline.py`) — оркестрация fetch → sniff mime (magic
+bytes) → `extract_text` → `run_resume_extraction`, идемпотентна по
+`source_answer_id`/`(candidate_profile_id, hh_resume_id)` на уровне сервиса (DONE-запись
+не бьёт HTTP/LLM повторно). CLI `src/sfera_ai/cli/run_resume_pipeline.py` — ручной прогон
+по HH_RESUME. Реальный прогон на 10 живых резюме (свой SSH-туннель к staging
+`db`+`backend`): 9 DONE + 1 FAILED (транзиентная 502 от самого HH API, не баг
+пайплайна), повторный прогон — 0 новых HTTP/LLM вызовов, `structured_data` вменяемые
+на ручной сверке. `uv run pytest` — 54 passed, регрессий нет. Детали — журнал
+step-файла. Следующий шаг — эпик E4 (видео) или E5 (очередь) — оба разблокированы
+графом зависимостей (`05_EPICS.md`), нужно решение владельца, с какого начать.
 
 ## Внешние гейты / блокеры
 
@@ -20,9 +27,9 @@
 
 ## Текущий следующий шаг
 
-Эпики E0 (bootstrap), E1 (`VacancyProfile`) и E2 (`CandidateProfile` identity resolver)
-полностью завершены, включая реальный прогон на проде. Следующий шаг — эпик **E3**
-(`ResumeExtract` пайплайн, `03_TDD.md`, раздел «Resume Pipeline»), см. `05_EPICS.md`.
+Эпики E0, E1, E2, E3 завершены. Дальше по графу зависимостей (`05_EPICS.md`) доступны
+E4 (интеграция с транскрибацией видео) и E5 (`AIProcessingJob`+очередь) — оба зависят
+только от уже готовых эпиков. Выбор, с какого начать — решение владельца.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -37,7 +44,7 @@
 | E0-01 | Bootstrap сервиса + reflection smoke-test (scaffold, env-config, reflection, tunnel, smoke-test код, Dockerfile, shared docker-сеть, роль `ai_readonly` создана, прогон на проде подтверждён) | DONE | 2026-08-26 |
 | E1-01 | `VacancyProfile` модель + CRUD | DONE | 2026-08-26 |
 | E2-01 | `CandidateProfile` identity resolver | DONE | 2026-08-26 |
-| E3-01 | `ResumeExtract` пайплайн | TODO | — |
+| E3-01 | `ResumeExtract` пайплайн (модель, получение файла, извлечение текста, LLM structured extraction, оркестрация+кэш) | DONE | 2026-08-27 |
 | E4-01 | Интеграция с `TranscriptionJob` | TODO | — |
 | E5-01 | `AIProcessingJob` + очередь (dry-run) | TODO | — |
 | E6-01 | Fit scoring | TODO | — |
@@ -47,6 +54,43 @@
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-27` — шаг `step-E3-05-dry-run-cache.md` выполнен, эпик E3 завершён:
+  `process_resume` (`src/sfera_ai/services/resume_pipeline.py`) — оркестрация
+  fetch → sniff mime (magic bytes, не расширение — `extract_text` не знает про
+  `source_type`) → `extract_text` → `run_resume_extraction`. Идемпотентность на
+  уровне сервиса: DONE-запись по `source_answer_id`/`(candidate_profile_id,
+  hh_resume_id)` возвращается без единого HTTP/LLM вызова; если упал только
+  LLM-шаг (`raw_text` уже заполнен) — ретраится только LLM, fetch не повторяется.
+  CLI `src/sfera_ai/cli/run_resume_pipeline.py` — ручной прогон по HH_RESUME (свежие
+  `hh_negotiation_id` в первую очередь: старые давали 404 от бэкенда — привязаны к
+  уже сменившемуся HH-коннекту). `tests/services/test_resume_pipeline.py` — 6 тестов.
+  Полный сьют `uv run pytest` — 54 passed. **Реальный прогон** (свой SSH-туннель к
+  staging `db`+`backend` через `ai_shared`, туннель не закоммичен — под вопросом
+  владельца, нужен ли постоянно): 10 живых HH-резюме, 9 DONE + 1 FAILED (502 —
+  транзиентная ошибка самого HH API), повторный прогон тех же 10 — 0 новых HTTP/LLM
+  вызовов (те же `extract_id`), `structured_data` вменяемые на ручной сверке.
+  Детали — журнал `step-E3-05-dry-run-cache.md`.
+- `2026-08-27` — шаг `step-E3-04-llm-structuring.md` выполнен: TDD-циклом (RED→GREEN)
+  добавлены `src/sfera_ai/providers.py` (`OpenRouterClient`/`LLMResult`/
+  `LLMProviderError` — единый тонкий клиент для всех LLM-вызовов пайплайна, переиспользуется
+  E6/E7) и `src/sfera_ai/services/resume_extraction.py` (`run_resume_extraction` —
+  PENDING → вызов LLM → DONE+`structured_data` или FAILED, не пишет частичный результат).
+  Невалидный JSON и недоступный провайдер — раздельные ветки FAILED (`error` = сырой ответ
+  либо текст ошибки провайдера, обрезаны до 2000 символов). `provider`/`model`/
+  `prompt_version` пишутся в строку `ResumeExtract`; токены/latency логируются на каждом
+  вызове через `logging` — в самой модели `ResumeExtract` нет колонок под них (в отличие от
+  `CandidateVacancyAnalysis`, у которой они есть по `03_TDD.md` разделу 2) — расхождение
+  DoD-формулировки с реальной схемой, решено логированием без изменения модели. Тесты
+  `tests/test_providers.py` (3, httpx.MockTransport, без реальной сети) и
+  `tests/services/test_resume_extraction.py` (3) — полный сьют 48 passed, регрессий нет.
+  Добавлен `openrouter_api_key`/`openrouter_base_url` в `config.py` — владелец вписал
+  реальный ключ в `.env` сам (агенту запрещено читать/писать файлы с секретами).
+- `2026-08-27` — шаг `step-E3-03-text-extraction.md` выполнен: `extract_text`
+  (`src/sfera_ai/services/resume_text_extraction.py`) — `pypdf`/`python-docx`,
+  `TextExtractionError` на битый файл/неподдерживаемый mime. Тест
+  `tests/services/test_resume_text_extraction.py` — 5 passed, полный сьют 42 passed,
+  регрессий нет. Детали и обоснование (legacy `.doc` не поддержан, разбиение
+  ответственности FAILED-перевода на следующий шаг) — журнал step-файла.
 - `2026-08-26` — эпик E2 (`CandidateProfile` identity resolver) реализован — модель,
   Alembic 0002, `resolve_or_create_candidate_profile` с защитой от гонки,
   `promote_hh_lead_to_application`, backfill-скрипт. Миграция и backfill реально

@@ -85,15 +85,15 @@
   `CandidateProfile`.
 
 ### E3 — `ResumeExtract` пайплайн
-- [ ] `epics/E3-resume-pipeline/step-E3-01-model-migration.md` — модель + Alembic-ревизия.
-- [ ] `epics/E3-resume-pipeline/step-E3-02-source-fetch.md` — получение файла: S3 Timeweb
+- [x] `epics/E3-resume-pipeline/step-E3-01-model-migration.md` — модель + Alembic-ревизия.
+- [x] `epics/E3-resume-pipeline/step-E3-02-source-fetch.md` — получение файла: S3 Timeweb
   (свои креды `USE_S3_STORAGE`, тот же бакет, что и backend — напрямую через `boto3`)
   или HH API (собственный HTTP-клиент, повторяющий контракт `get_resume_pdf` — код
   backend'а переиспользовать нельзя, разные репозитории).
-- [ ] `epics/E3-resume-pipeline/step-E3-03-text-extraction.md` — PDF/DOC → `raw_text`.
-- [ ] `epics/E3-resume-pipeline/step-E3-04-llm-structuring.md` — LLM structured
+- [x] `epics/E3-resume-pipeline/step-E3-03-text-extraction.md` — PDF/DOC → `raw_text`.
+- [x] `epics/E3-resume-pipeline/step-E3-04-llm-structuring.md` — LLM structured
   extraction, общий `providers.py` клиент (переиспользуется E6/E7).
-- [ ] `epics/E3-resume-pipeline/step-E3-05-dry-run-cache.md` — сквозной пайплайн,
+- [x] `epics/E3-resume-pipeline/step-E3-05-dry-run-cache.md` — сквозной пайплайн,
   прогон на 5–10 реальных резюме из прода. Готово: кэшируется, повторный запуск не
   бьёт HH API дважды по одному `hh_resume_id`.
 
