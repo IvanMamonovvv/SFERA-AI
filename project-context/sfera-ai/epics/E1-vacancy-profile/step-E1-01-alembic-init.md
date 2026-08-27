@@ -1,6 +1,6 @@
 # Шаг E1-01 — Alembic — инициализация
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0 (весь эпик)
 
 ## Цель
@@ -52,7 +52,7 @@ git commit -m "chore: initialize Alembic for AI-owned tables"
 
 ## Критерии готовности (DoD)
 
-- [ ] `alembic.ini`/`migrations/` присутствуют, `env.py` читает `write_database_url`
+- [x] `alembic.ini`/`migrations/` присутствуют, `env.py` читает `write_database_url`
 
 ## Как проверить
 
@@ -66,4 +66,15 @@ uv run alembic current
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — выполнено с отклонением от порядка: `write_database_url` (E1-02) и
+  `Base`/`TimestampMixin` (E1-03) реализованы первыми — E1-01 фактически от них зависит,
+  а не наоборот (в step-файлах эпика указано обратное). `uv add alembic`,
+  `alembic init migrations`, `env.py` настроен на `Settings().write_database_url` и
+  `Base.metadata`. Коммит `ac26c0a`. **Не сделано:** `uv run alembic current` падает —
+  `Settings()` требует оба URL из реального `.env`, файл под глобальным запретом
+  чтения/правки, владелец добавит значения сам и подтвердит прогон.
+- `2026-08-26` — DoD закрыт: владелец добавил в `.env` `WRITE_DATABASE_URL` на разовый
+  локальный Postgres в Docker (`postgres:16`, порт 5434, только для проверки — не прод,
+  контейнер снесён после теста). `uv run alembic current` прошёл, подключился, версии
+  нет (миграций пока нет — ожидаемо). Реальный `WRITE_DATABASE_URL` для прода появится
+  на шаге `step-E1-09-apply-migration-prod.md` (роль `ai_owner` ещё не создана).

@@ -1,6 +1,6 @@
 # Шаг E2-06 — Read-only backfill-скрипт
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2-04
 **Перед началом:** `05_EPICS.md`, эпик E2: «read-only backfill-скрипт для первого
 прогона по существующим `Application`/`HHNegotiationRecord`». Читает платформу через
@@ -89,8 +89,8 @@ git commit -m "feat: add read-only backfill script for CandidateProfile identity
 
 ## Критерии готовности (DoD)
 
-- [ ] Ручной прогон печатает `OK: processed N platform records, 0 platform writes`
-- [ ] Повторный прогон не создаёт дублей
+- [x] Ручной прогон печатает `OK: processed N platform records, 0 platform writes`
+- [x] Повторный прогон не создаёт дублей (гарантия схемы: `UniqueConstraint` на `application_id`/`hh_negotiation_id`, покрыто юнит-тестами `resolve_or_create_candidate_profile` — полный повторный прогон на проде не делали, см. журнал)
 
 ## Как проверить
 
@@ -104,4 +104,11 @@ uv run python -m sfera_ai.cli.backfill_candidate_profiles
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-26 — реальный прогон на проде выполнен вместе с E2-07 (миграция +
+  backfill одной операцией, владелец дал явное разрешение). `OK: processed 3461
+  platform records, 0 platform writes`. Итог в `ai_candidate_profile`: 3461 строка,
+  3310 с `hh_negotiation_id`, 1270 с `application_id` — 1119 пересечений корректно
+  слиты в одну карточку, дублей нет (`UniqueConstraint` не нарушен). Повторный
+  полный прогон на проде не делали — идемпотентность приняли на основе гарантии
+  схемы и юнит-тестов `resolve_or_create_candidate_profile` (решение владельца).
+  Детали инцидентов при подготовке — в журнале `step-E2-07-apply-migration-prod.md`.

@@ -1,6 +1,6 @@
 # Шаг E0-03 — Reflection-модуль (automap на 2-3 таблицах)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0-02
 **Перед началом:** reflection нужно ограничить конкретными таблицами
 (`courses_application`, `testchecks_answer`) через `only=[...]`, иначе automap
@@ -79,8 +79,8 @@ git commit -m "feat: add scoped SQLAlchemy automap reflection for platform table
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/test_platform_db.py -v` зелёный
-- [ ] Reflection не захватывает таблицы вне переданного списка
+- [x] `uv run pytest tests/test_platform_db.py -v` зелёный
+- [x] Reflection не захватывает таблицы вне переданного списка
 
 ## Как проверить
 
@@ -94,4 +94,4 @@ uv run pytest tests/test_platform_db.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — реализован `reflect_platform_tables` (SQLAlchemy automap, ограничен `only=[...]`), тест `tests/test_platform_db.py` зелёный (sqlite in-memory, mock-engine), коммит `4cbcfb4`.

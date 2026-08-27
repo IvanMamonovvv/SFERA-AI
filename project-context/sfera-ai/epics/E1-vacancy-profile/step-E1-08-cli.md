@@ -1,6 +1,6 @@
 # Шаг E1-08 — CRUD-консоль для ручного заполнения
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-07
 **Перед началом:** прочитай `05_EPICS.md` эпик E1: «простой CRUD-скрипт/консоль для
 ручного заполнения (без публичного API)». Три команды: `create` (новая версия),
@@ -146,7 +146,7 @@ git commit -m "feat: add vacancy-profile CLI for manual data entry"
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/cli/test_vacancy_profile_cli.py -v` зелёный
+- [x] `uv run pytest tests/cli/test_vacancy_profile_cli.py -v` зелёный
 
 ## Как проверить
 
@@ -160,4 +160,4 @@ uv run pytest tests/cli/test_vacancy_profile_cli.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-26 — CLI `vacancy-profile create/show-current/list` реализован поверх versioning-сервиса (E1-07). Тест `tests/cli/test_vacancy_profile_cli.py` зелёный, коммит `7da8fb1`.

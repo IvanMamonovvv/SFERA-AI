@@ -1,6 +1,6 @@
 # Шаг E2-05 — Функция перехода HH Lead → Platform Candidate
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2-04
 **Перед началом:** прочитай `03_TDD.md`, «Candidate Identity». Detection-джоба (эпик E5,
 здесь только сама функция) видит `HHNegotiationRecord.application_id IS NOT NULL` у
@@ -96,7 +96,7 @@ git commit -m "feat: add HH lead to platform candidate transition service"
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/services/test_candidate_transition.py -v` зелёный
+- [x] `uv run pytest tests/services/test_candidate_transition.py -v` зелёный
 
 ## Как проверить
 
@@ -110,4 +110,4 @@ uv run pytest tests/services/test_candidate_transition.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-26 — реализован `promote_hh_lead_to_application`, оба теста зелёные, коммит `71ef56a`.

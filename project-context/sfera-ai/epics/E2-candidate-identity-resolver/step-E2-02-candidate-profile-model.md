@@ -1,6 +1,6 @@
 # Шаг E2-02 — `CandidateProfile` модель
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1-03 (`Base`/`TimestampMixin`)
 **Перед началом:** прочитай `03_TDD.md`, раздел «2. Сущности / данные», подраздел
 `CandidateProfile`. Оба FK — обычные `Integer`, unique, nullable, без `ForeignKey()`
@@ -114,7 +114,7 @@ git commit -m "feat: add CandidateProfile SQLAlchemy model"
 
 ## Критерии готовности (DoD)
 
-- [ ] `uv run pytest tests/models/test_candidate_profile.py -v` зелёный
+- [x] `uv run pytest tests/models/test_candidate_profile.py -v` зелёный
 
 ## Как проверить
 
@@ -128,4 +128,5 @@ uv run pytest tests/models/test_candidate_profile.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — модель, тест по шагу без изменений. `uv run pytest` полный сьют — 14
+  passed, регрессий нет. Коммит `240ad27`.

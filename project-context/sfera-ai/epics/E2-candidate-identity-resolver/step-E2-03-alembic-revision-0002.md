@@ -1,6 +1,6 @@
 # Шаг E2-03 — Alembic-ревизия 0002: `ai_candidate_profile`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2-02
 **Перед началом:** `03_TDD.md` («Migration Plan») изначально предполагал одну ревизию
 `0001_initial` на `ai_vacancy_profile`+`ai_candidate_profile`+`ai_resume_extract` разом.
@@ -81,7 +81,7 @@ git commit -m "feat: add Alembic revision 0002 for ai_candidate_profile"
 
 ## Критерии готовности (DoD)
 
-- [ ] Синтаксическая проверка на SQLite/`--sql` без ошибок
+- [x] Синтаксическая проверка на SQLite/`--sql` без ошибок
 
 ## Как проверить
 
@@ -95,4 +95,12 @@ uv run alembic -x sqlalchemy.url=sqlite:///./_migration_check.db upgrade head &&
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — ревизия `0002` сгенерирована и переименована по паттерну (`revision id`
+  заменён с auto-hash на `0002`, `down_revision='0001'`, как в E1-05). DDL дополнен
+  относительно черновика в шаге: добавлены колонки `is_superseded`/`superseded_by_id`
+  и self-referencing FK `fk_candidate_profile_superseded_by` (ondelete='SET NULL') —
+  черновик шага их не включал, но модель E2-02 их требует, миграция должна совпадать
+  с моделью. `-x sqlalchemy.url=...` на SQLite не сработал (env.py игнорирует `-x`,
+  всегда берёт `write_database_url`, как в E1-05) — использован запасной путь
+  `alembic upgrade head --sql`, DDL сгенерирован и проверен визуально, без ошибок.
+  Реальное применение на прод — отдельно на E2-07. Коммит `2ba937c`.

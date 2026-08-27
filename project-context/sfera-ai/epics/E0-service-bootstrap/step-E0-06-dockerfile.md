@@ -1,6 +1,6 @@
 # Шаг E0-06 — Dockerfile
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E0-01, E0-05
 
 ## Цель
@@ -57,7 +57,7 @@ git commit -m "chore: add Dockerfile for AI service"
 
 ## Критерии готовности (DoD)
 
-- [ ] `docker build` проходит без ошибок
+- [x] `docker build` проходит без ошибок
 
 ## Как проверить
 
@@ -71,4 +71,4 @@ docker build -t sfera-ai:bootstrap .
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-26` — Dockerfile + .dockerignore созданы. При сборке `uv sync --frozen --no-dev` падал: `pyproject.toml` объявляет `readme = "README.md"`, но README.md не копировался в образ до финального `uv sync` — добавлен в первый `COPY pyproject.toml uv.lock README.md ./`. После фикса `docker build -t sfera-ai:bootstrap .` проходит без ошибок.
