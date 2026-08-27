@@ -1,6 +1,6 @@
 # Шаг E5-05 — зависшие `PROCESSING` джобы
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E5-04
 **Перед началом:** прочитай `03_TDD.md` «6. Processing Queue» → «Зависшие PROCESSING»,
 «Failure Scenarios» → «Job завис».
@@ -26,8 +26,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Зависшая джоба (started_at старше порога) → `PENDING`, `attempts+1`
-- [ ] Свежая `PROCESSING` не трогается
+- [x] Зависшая джоба (started_at старше порога) → `PENDING`, `attempts+1`
+- [x] Свежая `PROCESSING` не трогается
 
 ## Как проверить
 
@@ -42,4 +42,15 @@ uv run pytest tests/services/test_job_processing.py -v -k stuck
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — реализовано: `requeue_stuck_jobs(session, threshold_hours)` в
+  `src/sfera_ai/services/job_processing.py` — `UPDATE ... WHERE status=PROCESSING AND
+  started_at < now()-threshold`, `attempts += 1`, `started_at = None` (не `FAILED` —
+  не вина джобы, следующий тик `process_batch` подхватит её снова). Зарегистрирован
+  как отдельный часовой job в `build_scheduler()` (`src/sfera_ai/scheduler.py`,
+  `run_requeue_stuck`, `CronTrigger(minute=0)`, отдельно от 3-разового тика).
+  Новая настройка `Settings.ai_stuck_job_threshold_hours` (default `2`) в `config.py`.
+  Тесты `tests/services/test_job_processing.py` — +2 (зависшая → `PENDING`+`attempts+1`,
+  свежая `PROCESSING` не трогается). Полный сьют `uv run pytest` — 79 passed, регрессий
+  нет. **Инструкция шага «эпик E5 → DONE» неточна** — в `05_EPICS.md`/каталоге шагов ещё
+  есть `step-E5-06-hh-lead-pii-ttl.md` и `step-E5-07-merge-detection.md` (TODO), эпик E5
+  не завершён. Дальше — `step-E5-06-hh-lead-pii-ttl.md`.
