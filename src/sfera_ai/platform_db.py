@@ -14,3 +14,4 @@ def reflect_platform_tables(engine: Engine, *, tables: Sequence[str]) -> Automap
 
 
 IDENTITY_RESOLVER_TABLES = ("courses_application", "headhunter_hhnegotiationrecord")
+VIDEO_FACTS_TABLES = ("testchecks_transcriptionjob",)

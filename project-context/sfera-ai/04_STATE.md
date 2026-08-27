@@ -4,22 +4,24 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-27` — шаг `step-E3-05-dry-run-cache.md` выполнен,
-эпик E3 (`ResumeExtract` пайплайн) завершён: `process_resume`
-(`src/sfera_ai/services/resume_pipeline.py`) — оркестрация fetch → sniff mime (magic
-bytes) → `extract_text` → `run_resume_extraction`, идемпотентна по
-`source_answer_id`/`(candidate_profile_id, hh_resume_id)` на уровне сервиса (DONE-запись
-не бьёт HTTP/LLM повторно). CLI `src/sfera_ai/cli/run_resume_pipeline.py` — ручной прогон
-по HH_RESUME. Реальный прогон на 10 живых резюме (свой SSH-туннель к staging
-`db`+`backend`): 9 DONE + 1 FAILED (транзиентная 502 от самого HH API, не баг
-пайплайна), повторный прогон — 0 новых HTTP/LLM вызовов, `structured_data` вменяемые
-на ручной сверке. `uv run pytest` — 54 passed, регрессий нет. Детали — журнал
-step-файла. Следующий шаг — эпик E4 (видео) или E5 (очередь) — оба разблокированы
-графом зависимостей (`05_EPICS.md`), нужно решение владельца, с какого начать.
+**Последнее обновление:** `2026-08-27` — шаг `step-E4-03-facts-adapter.md` выполнен,
+эпик E4 (видео) завершён: `video_facts_from_transcript(job) -> list[dict]`
+(`src/sfera_ai/services/video_facts.py`) — готовый `TranscriptionJob.summary_text` →
+факт-объект по схеме `03_TDD.md` (`key="video_summary"`, `confidence="MEDIUM"`,
+`evidence=[{"source_type": "VIDEO", "source_id": answer_id, "excerpt": summary_text}]`),
+без LLM-вызова и без обращения к видеофайлу/S3. `uv run pytest` — 60 passed, регрессий
+нет. Следующий шаг — эпик E5 (`AIProcessingJob`+очередь).
 
 ## Внешние гейты / блокеры
 
-Блокеров нет. Роль `ai_readonly` создана на прод-Postgres 2026-08-26 (владелец дал явное
+**E4 разблокирован** (`2026-08-27`): владелец реализовал и раскатал модель `TranscriptionJob`
+в `sfera_backend` (шаг 01 внешнего плана `PLATFORM_video-transcription-plan/`, влито в `main`
+PR #94, применено на проде). E4-02 (reflection + `get_transcript_for_answer`) выполнен и
+подтверждён на реальной БД. Остальные шаги внешнего пайплайна (очередь, whisper-провайдер,
+LLM summary, воркер) пока не реализованы — не блокируют E4-02/03 (нужна только сама таблица),
+но реальных `DONE`-записей в проде ещё не появится, пока внешний пайплайн не заработает целиком.
+
+Кроме этого блокеров нет. Роль `ai_readonly` создана на прод-Postgres 2026-08-26 (владелец дал явное
 разрешение), см. журнал `step-E0-04-ssh-tunnel.md` и `step-E0-05-smoke-test.md`.
 
 6 открытых вопросов (`02_CONTEXT.md`) — ни один не блокирует старт разработки,
@@ -27,9 +29,8 @@ step-файла. Следующий шаг — эпик E4 (видео) или E
 
 ## Текущий следующий шаг
 
-Эпики E0, E1, E2, E3 завершены. Дальше по графу зависимостей (`05_EPICS.md`) доступны
-E4 (интеграция с транскрибацией видео) и E5 (`AIProcessingJob`+очередь) — оба зависят
-только от уже готовых эпиков. Выбор, с какого начать — решение владельца.
+Эпики E0, E1, E2, E3, E4 завершены. Дальше по графу зависимостей (`05_EPICS.md`) —
+эпик E5 (`AIProcessingJob`+очередь).
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -45,7 +46,9 @@ E4 (интеграция с транскрибацией видео) и E5 (`AIP
 | E1-01 | `VacancyProfile` модель + CRUD | DONE | 2026-08-26 |
 | E2-01 | `CandidateProfile` identity resolver | DONE | 2026-08-26 |
 | E3-01 | `ResumeExtract` пайплайн (модель, получение файла, извлечение текста, LLM structured extraction, оркестрация+кэш) | DONE | 2026-08-27 |
-| E4-01 | Интеграция с `TranscriptionJob` | TODO | — |
+| E4-01 | Проверка готовности `TranscriptionJob` (гейт) | DONE | 2026-08-27 |
+| E4-02 | Reflection на `TranscriptionJob` | DONE | 2026-08-27 |
+| E4-03 | Адаптер видео-фактов для сборки профиля | DONE | 2026-08-27 |
 | E5-01 | `AIProcessingJob` + очередь (dry-run) | TODO | — |
 | E6-01 | Fit scoring | TODO | — |
 | E7-01 | Vacancy Feedback/Memory workflow | TODO | — |
@@ -54,6 +57,26 @@ E4 (интеграция с транскрибацией видео) и E5 (`AIP
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-27` — шаг `step-E4-03-facts-adapter.md` выполнен, эпик E4 завершён:
+  `video_facts_from_transcript(job)` в `services/video_facts.py` — один факт-объект из
+  `TranscriptionJob.summary_text` по схеме `03_TDD.md` (`key="video_summary"`,
+  `confidence="MEDIUM"`, `evidence` с `source_type="VIDEO"`), `job is None`/пустой
+  `summary_text` → `[]`. Никакого обращения к видеофайлу/S3 — только текстовые поля уже
+  отфильтрованного (`status="DONE"`) джоба из E4-02. TDD (RED→GREEN), 3 новых теста,
+  полный сьют 60 passed. Следующий шаг — эпик E5.
+- `2026-08-27` — шаг `step-E4-02-reflection.md` выполнен: владелец реализовал и раскатал
+  модель `TranscriptionJob` в `sfera_backend` (по согласованию — только шаг 01 внешнего
+  плана, без остального пайплайна), гейт E4-01 снят. `VIDEO_FACTS_TABLES` в `platform_db.py`,
+  `get_transcript_for_answer` в `services/video_facts.py` — TDD (RED→GREEN), 3 теста, полный
+  сьют 57 passed. Прод-смоук нашёл и закрыл реальный блокер: `ai_readonly` не имел `GRANT
+  SELECT` на новую платформенную таблицу — выдан отдельным грантом (владелец разрешил).
+  Следующий шаг — E4-03 (что бы это ни было по `05_EPICS.md`) либо E5.
+- `2026-08-27` — шаг `step-E4-01-readiness-gate.md` выполнен: `TranscriptionJob` не
+  реализован в `sfera_backend` (`grep -r "TranscriptionJob" --include="*.py"
+  FullSphera/sfera_backend/` — 0 совпадений; `PLATFORM_video-transcription-plan/01_STATE.md`
+  — все шаги 00–10 `TODO`, реализация не начата). Блокер зафиксирован в разделе «Внешние
+  гейты / блокеры». E4-02/03 переносятся. Следующий разблокированный шаг — эпик E5
+  (`AIProcessingJob`+очередь), без источника видео до готовности `TranscriptionJob`.
 - `2026-08-27` — шаг `step-E3-05-dry-run-cache.md` выполнен, эпик E3 завершён:
   `process_resume` (`src/sfera_ai/services/resume_pipeline.py`) — оркестрация
   fetch → sniff mime (magic bytes, не расширение — `extract_text` не знает про
