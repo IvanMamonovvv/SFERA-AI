@@ -1,6 +1,6 @@
 # Шаг E4-02 — reflection на `TranscriptionJob`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E4-01 (гейт пройден — таблица существует)
 
 ## Цель
@@ -23,8 +23,10 @@ Reflection-набор платформенных таблиц (`platform_db.py`,
 
 ## Критерии готовности (DoD)
 
-- [ ] Reflection читает `TranscriptionJob` без ошибок на dev-схеме
-- [ ] `status != DONE` → `None`, не частичный результат
+- [x] Reflection читает `TranscriptionJob` без ошибок на dev-схеме (плюс подтверждено на
+  реальном проде через туннель)
+- [x] `status != DONE` → `None`, не частичный результат (тест +
+  прод-смоук на несуществующий `answer_id`)
 
 ## Как проверить
 
@@ -38,4 +40,16 @@ uv run pytest tests/services/test_video_facts.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — `VIDEO_FACTS_TABLES = ("testchecks_transcriptionjob",)` добавлен в
+  `platform_db.py`. `get_transcript_for_answer(platform_base, answer_id)`
+  (`src/sfera_ai/services/video_facts.py`) — фильтр `status == "DONE"`, иначе `None`.
+  TDD: `tests/services/test_video_facts.py` (3 теста, sqlite in-memory) — RED (ModuleNotFoundError)
+  → GREEN. Полный сьют `uv run pytest` — 57 passed, регрессий нет.
+  **Прод-смоук** (свой SSH-туннель к staging, туннель закрыт после проверки): первый
+  вызов упал `InsufficientPrivilege: permission denied for table testchecks_transcriptionjob`
+  — роль `ai_readonly` не имела `GRANT SELECT` на новую платформенную таблицу (тот же класс
+  проблемы, что `GRANT REFERENCES`, см. память `project_grant_references_pattern`, только
+  для чтения новой таблицы, а не FK). Выполнено `GRANT SELECT ON testchecks_transcriptionjob
+  TO ai_readonly;` через `docker exec sfera-staging-db-1 psql -U sfera_app -d sfera_db`
+  (владелец дал явное разрешение). После гранта — `get_transcript_for_answer` отработал
+  чисто, `None` для несуществующего `answer_id`.

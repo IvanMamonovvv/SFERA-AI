@@ -1,6 +1,6 @@
 # Шаг E4-03 — адаптер видео-фактов для сборки профиля
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E4-02
 **Перед началом:** прочитай `03_TDD.md` «Candidate Profile — как строится и
 обновляется» (таблица источников).
@@ -26,8 +26,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Факт-объекты соответствуют схеме `03_TDD.md`
-- [ ] Нет обращения к видеофайлу/S3, только к текстовым полям `TranscriptionJob`
+- [x] Факт-объекты соответствуют схеме `03_TDD.md`
+- [x] Нет обращения к видеофайлу/S3, только к текстовым полям `TranscriptionJob`
 
 ## Как проверить
 
@@ -42,4 +42,12 @@ uv run pytest tests/services/test_video_facts.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — `video_facts_from_transcript(job) -> list[dict]`
+  (`src/sfera_ai/services/video_facts.py`): один факт-объект `key="video_summary"`,
+  `value=job.summary_text`, `confidence="MEDIUM"`, `evidence=[{"source_type": "VIDEO",
+  "source_id": job.answer_id, "excerpt": job.summary_text}]`. `job is None` или пустой
+  `summary_text` → `[]`. Обращений к видеофайлу/S3 нет — только `summary_text`/`answer_id`
+  из уже отфильтрованного (`status == "DONE"`) `TranscriptionJob` (E4-02). Тесты:
+  `tests/services/test_video_facts.py` (3 новых, sqlite in-memory) RED
+  (`ImportError: video_facts_from_transcript`) → GREEN. Полный сьют `uv run pytest` —
+  60 passed, регрессий нет.

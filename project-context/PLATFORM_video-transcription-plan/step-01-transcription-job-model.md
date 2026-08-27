@@ -1,6 +1,6 @@
 # Step 01 — Модель-очередь `TranscriptionJob`
 
-**Статус:** ⬜ TODO
+**Статус:** ✅ DONE
 **Зависит от:** можно параллельно с step-00.
 **Цель:** durable-очередь в БД — одна строка на видеовизитку, переживает рестарты, безопасна для нескольких воркеров.
 
@@ -52,9 +52,23 @@ class TranscriptionJob(CreatedModifiedBaseModel):
 
 ## Критерий готовности
 
-- [ ] Миграция применяется, откат чистый.
-- [ ] `TranscriptionJob.objects.get_or_create(answer=...)` не создаёт дублей.
-- [ ] Модель видна в Django-admin (для мониторинга очереди).
+- [x] Миграция применяется, откат чистый (проверено `sqlmigrate` до раскатки, реально
+  применена — таблица подтверждена на проде через reflection 2026-08-27).
+- [x] `answer = OneToOneField(Answer, ...)` — `get_or_create(answer=...)` не создаёт дублей
+  по конструкции поля (`answer_id` UNIQUE REFERENCES подтверждён на реальной таблице).
+- [ ] Модель видна в Django-admin — **неактуально**: в `sfera_backend` вообще нет
+  `admin.py` ни у одного приложения (Django admin не используется в проекте), пункт плана
+  пропущен как не соответствующий стеку.
 
 ## Журнал
-- (пусто)
+- `2026-08-27` — владелец закоммитил, запушил (`54eeb94`), влил в `main` через PR #94
+  (`e84982c`) и раскатил на прод. Проверка через reflection (SFERA-AI `platform_db.py`,
+  свой SSH-туннель к staging Postgres, туннель закрыт после проверки): таблица
+  `testchecks_transcriptionjob` реально существует, колонки совпадают с моделью
+  (`id, created_at, modified_at, status, transcript_text, summary_text, verdict, is_empty,
+  attempts, error, locked_at, started_at, finished_at, answer_id`). Шаг закрыт.
+- `2026-08-27` — модель `TranscriptionJob` добавлена в `testchecks/models.py` (по образцу
+  соседней `AnswerVideoUpload`, тот же `CreatedModifiedBaseModel`), миграция
+  `0009_transcriptionjob.py` сгенерирована `makemigrations`. `sqlmigrate testchecks 0009`
+  проверен визуально — DDL чистый. `makemigrations --check --dry-run` показал отдельное
+  несвязанное расхождение в `lessons/migrations` (существовало до правки, не тронуто).
