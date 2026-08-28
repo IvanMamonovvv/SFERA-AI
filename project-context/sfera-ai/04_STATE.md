@@ -4,7 +4,21 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-27` — реальный прогон всего эпика E5 на staging
+**Последнее обновление:** `2026-08-28` — эпик **E6 (Fit scoring) полностью завершён**.
+`step-E6-04`/`step-E6-05` закрыты реальными прод-прогонами на `course_id=25` («Менеджер
+по продажам (ШКМ)»): создан CLI `run_fit_scoring_sample.py`, черновой `VacancyProfile`
+id=3, сборка фактов + fit-scoring на 20 реальных кандидатов (≈$0.0004/кандидат по
+ориентировочному тарифу gpt-4o-mini). Владелец подтвердил и черновик требований, и
+вердикты модели. Побочно найдено и закрыто: `ai_readonly` не имел `GRANT SELECT` на
+`courses_course`/`courses_progress`/`testchecks_testattempt` — гранты выданы (владелец
+подтвердил каждый). Флаг `ai_processing_dry_run` для непрерывной автообработки через
+очередь сознательно НЕ снят — планировщик (`scheduler.py`) физически не задеплоен на
+проде как постоянный процесс (`Dockerfile` CMD — временный `smoke_test`, реальный
+entrypoint — предмет **E8**); включать его раньше деплоя бессмысленно и рискованно.
+Детали — журналы `step-E6-04-queue-integration.md`/`step-E6-05-manual-validation.md`.
+Следующий шаг — эпик **E7** (Vacancy Feedback/Memory).
+
+`2026-08-27` — реальный прогон всего эпика E5 на staging
 (владелец попросил проверить, хватит ли текущих лимитов очереди на 100-200 кандидатов/сутки
 по 3 вакансиям ~400 каждая). Три находки:
 1. **Реальный баг** в уже `DONE` шаге `step-E5-02-change-detection.md`:
@@ -49,9 +63,9 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Текущий следующий шаг
 
-Эпики E0, E1, E2, E3, E4 завершены. Эпик E5 в процессе (`step-E5-01`..`06` выполнены,
-`VACANCY_PROFILE_CHANGED`/`FEEDBACK_APPLIED` осознанно отложены до E6/E7) — дальше
-`step-E5-07-merge-detection.md`.
+Эпики E0–E6 завершены. Следующий — эпик **E7** (Vacancy Feedback/Memory workflow,
+зависит только от E1) по графу зависимостей `05_EPICS.md`. E8 (Read API) не начинать
+раньше E7 — явная зависимость.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -70,14 +84,105 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E4-01 | Проверка готовности `TranscriptionJob` (гейт) | DONE | 2026-08-27 |
 | E4-02 | Reflection на `TranscriptionJob` | DONE | 2026-08-27 |
 | E4-03 | Адаптер видео-фактов для сборки профиля | DONE | 2026-08-27 |
-| E5-01 | `AIProcessingJob` + очередь (dry-run) | TODO | — |
-| E6-01 | Fit scoring | TODO | — |
+| E5-01 | `AIProcessingJob` + очередь (dry-run, включая E5-07 merge detection) | DONE | 2026-08-27 |
+| E6-01 | Fit scoring — сборка `CandidateProfile.facts` (`step-E6-01-profile-assembly.md`) | DONE | 2026-08-27 |
+| E6-02 | `CandidateVacancyAnalysis` модель + Alembic (`step-E6-02-analysis-model.md`) | DONE | 2026-08-27 |
+| E6-03 | Реальный LLM Fit-вызов, версии, `is_current` (`step-E6-03-llm-fit-call.md`) | DONE | 2026-08-27 |
+| E6-04 | Включение реальных AI-вызовов в очередь (`step-E6-04-queue-integration.md`) | DONE | 2026-08-28 |
+| E6-05 | Ручной прогон и сверка с HR (`step-E6-05-manual-validation.md`) | DONE | 2026-08-28 |
 | E7-01 | Vacancy Feedback/Memory workflow | TODO | — |
 | E8-01 | Read API | TODO | — |
 | E9-01 | Export | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-28` — эпик **E6 (Fit scoring) завершён**: `step-E6-04-queue-integration.md`
+  и `step-E6-05-manual-validation.md` закрыты. Реальный прод-прогон на `course_id=25`
+  («Менеджер по продажам (ШКМ)», найден по UUID `fb16645fbe35418ea3342734becc489b` через
+  `courses_course.course_uuid` — понадобился отдельный `GRANT SELECT` на `courses_course`/
+  `courses_progress`/`testchecks_testattempt` для `ai_readonly`, владелец подтвердил).
+  Новый CLI `src/sfera_ai/cli/run_fit_scoring_sample.py` (ручной прогон, round-robin
+  выборка по `data_completeness`, CSV/stdout вывод) — то, что требовал `step-E6-05`.
+  Создан черновой `VacancyProfile` id=3 v1 для course 25 (владелец подтвердил «пока
+  устраивает», не финальный текст). 20 реальных кандидатов прогнаны через полный
+  пайплайн (`build_or_update_candidate_facts` + `run_fit_scoring`): 12× `NOT_ENOUGH_DATA`
+  (у всех — только 3 факта, contact-info, анкета не дозаполнена самим кандидатом — не
+  баг), 5× `POSSIBLE_MATCH`, 1× `WEAK_MATCH`, 1× `NOT_A_MATCH` — у кандидатов с 8+
+  фактами. Владелец сверил и подтвердил «адекватно» — правка промпта не потребовалась.
+  Стоимость по факту (п.0 E6-04) — ≈$0.0004/кандидат (facts+fit, ориентировочный тариф
+  gpt-4o-mini через OpenRouter, точную ставку сверить в дашборде OpenRouter). Флаг
+  `ai_processing_dry_run` для автоматической обработки через очередь сознательно НЕ
+  снят — планировщик (`scheduler.py`) физически не задеплоен на проде как постоянный
+  процесс (`Dockerfile` CMD — временный `smoke_test`, реальный entrypoint — E8);
+  решение владельца — включать раньше деплоя бессмысленно, вернуться к этому на E8 с
+  отдельным подтверждением. Полный сьют `uv run pytest` — 110 passed, регрессий нет
+  (код в этой сессии не менялся, кроме нового CLI). Следующий шаг — эпик **E7** (Vacancy
+  Feedback/Memory workflow).
+- `2026-08-27` — шаг `step-E6-04-queue-integration.md` — код диспетчера выполнен,
+  **шаг не DONE** (первый реальный платный AI-вызов на проде ещё не запускался,
+  нужно отдельное подтверждение владельца после оценки стоимости — п.0/п.2 DoD шага).
+  `process_batch` (`job_processing.py`) диспетчерит по `reason`:
+  `VACANCY_PROFILE_CHANGED`/`FEEDBACK_APPLIED` → `run_fit_scoring` (E6-03), остальные
+  → `build_or_update_candidate_facts` (E6-01). Идемпотентность: реальный AI-вызов —
+  только когда `_still_relevant` ещё true и `dry_run=False`, иначе `DONE` без вызова.
+  Новый `pilot_course_id` (`config.py` → `ai_processing_pilot_course_id`) ограничивает
+  реальные вызовы одним `course` при снятом dry-run; вне пилота джоба остаётся `PENDING`.
+  Профильные джобы резолвят `course` через `CandidateProfile.application_id` →
+  `courses_application.course_id` (нет прямой связи в модели). `scheduler.py` собирает
+  `OpenRouterClient` и передаёт в `process_batch`. Тесты — 4 новых
+  (`tests/services/test_job_processing.py`, моки диспетчеризации/пилота, без реальных
+  LLM/платформенных вызовов). Полный сьют `uv run pytest` — 110 passed, регрессий нет.
+  Детали и что осталось перед прод-пилотом — журнал step-файла.
+- `2026-08-27` — шаг `step-E6-03-llm-fit-call.md` выполнен: `run_fit_scoring()`
+  (`src/sfera_ai/services/fit_scoring.py`) — промпт из `CandidateProfile.facts` +
+  `VacancyProfile.requirements` + `memory_rule_texts` (пустой список — `VacancyMemory`
+  ещё не реализована, E7), вызов `OpenRouterClient.complete` (E3-04), строгая валидация
+  JSON-ответа (choices `confidence`/`recommendation`, диапазоны `fit_score`/
+  `data_completeness`, типы списков/dict) — при любом нарушении бросает
+  `InvalidFitScoringResponse` ДО записи в БД (LLM-вызов и валидация целиком до
+  session.add/commit). `LLMProviderError` не перехватывается, пробрасывается наверх
+  (обработка на уровне очереди — E5). Транзакция версии — по паттерну
+  `services/vacancy_profile.py`: снять `is_current` со старой версии + `flush()` до
+  insert новой, один `commit()`. `input_snapshot` = `sources_snapshot` +
+  `vacancy_profile_id` + `memory_ids`. `cost_estimate` оставлен `None` — нет
+  согласованной тарифной формулы, поле готово на будущее. Тесты —
+  `tests/services/test_fit_scoring.py` (6). Полный сьют `uv run pytest` — 107 passed,
+  регрессий нет. Эпик E6 не завершён — дальше `step-E6-04-queue-integration.md`.
+- `2026-08-27` — шаг `step-E5-07-merge-detection.md` выполнен, эпик E5 завершён:
+  модель `AiServiceState` (key-value курсор, `src/sfera_ai/models/ai_service_state.py`),
+  ревизия `0006`, `detect_and_process_merges` в `src/sfera_ai/services/merge_detection.py`
+  — переносит `application_id` или проставляет `is_superseded`/`superseded_by_id` по
+  `CandidateMergeLog` (03_TDD.md, «Candidate Identity — Merge кандидатов»). Реальные
+  колонки `courses_candidatemergelog` проверены живой reflection'ом на staging перед
+  реализацией (`canonical_application_id`/`duplicate_application_id`, не `source`/
+  `target` — TDD предупреждал не копировать псевдокод как есть, разошёлся только
+  комментарий, не структура). Побочно найден и исправлен пробел: `detect_and_enqueue`
+  (`job_detection.py`) не фильтровал `is_superseded=False` в выборке для
+  `CANDIDATE_DATA_CHANGED` — добавлен фильтр. Тесты — `tests/models/test_ai_service_state.py`
+  (2), `tests/services/test_merge_detection.py` (5). Upgrade head применён на staging
+  через туннель (FK на платформу нет, GRANT не нужен); upgrade+downgrade полного цикла
+  проверен на отдельной SQLite. Полный сьют `uv run pytest` — 101 passed, регрессий нет.
+- `2026-08-27` — шаг `step-E6-02-analysis-model.md` выполнен: модель
+  `CandidateVacancyAnalysis` (`src/sfera_ai/models/candidate_vacancy_analysis.py`),
+  ревизия `0005` (`migrations/versions/0005_ai_candidate_vacancy_analysis.py`), тесты
+  `tests/models/test_candidate_vacancy_analysis.py` (6). `vacancy_profile_id` —
+  `ForeignKey(..., ondelete="RESTRICT")` (PROTECT, в отличие от остальных FK этой модели),
+  подтверждено тестом с `PRAGMA foreign_keys=ON` на SQLite. `course_id` без
+  SQLAlchemy `ForeignKey` в модели (платформенная таблица, как у `AIProcessingJob`) — FK
+  на `courses_course` только в raw-миграции. Upgrade head применён на staging через
+  туннель (GRANT REFERENCES на `courses_course` уже был выдан в E1-09, новых не
+  потребовалось); upgrade+downgrade полного цикла проверен на отдельной SQLite-БД.
+  Полный сьют `uv run pytest` — 94 passed, регрессий нет.
+- `2026-08-27` — шаг `step-E6-01-profile-assembly.md` выполнен:
+  `build_or_update_candidate_facts()` (`src/sfera_ai/services/candidate_facts.py`) —
+  инкрементальная сборка `CandidateProfile.facts` из ответов (батч-LLM), готовых
+  `ResumeExtract` (без LLM), готовых видео-транскриптов (без LLM). Триггер — вынесенный
+  из `change_detection.needs_profile_rebuild` в переиспользуемую
+  `compute_current_sources_snapshot`. Вне scope: создание `ResumeExtract` для
+  `ANKETA_FILE`-ответа (детекция+`process_resume`) — только чтение уже `DONE`; это
+  переносится в `E6-04`/отдельный шаг. `data_completeness` пороги (0→MINIMAL,
+  1-2→PARTIAL, 3-4→FULL) — решение принято на этом шаге, TDD точных порогов не
+  фиксировал. Полный сьют — 88 passed.
 - `2026-08-27` — шаг `step-E5-06-hh-lead-pii-ttl.md` выполнен:
   `purge_expired_hh_lead_resumes(session, ttl_days)` в `src/sfera_ai/services/pii_retention.py`
   — `SELECT ... JOIN CandidateProfile WHERE application_id IS NULL AND processed_at <

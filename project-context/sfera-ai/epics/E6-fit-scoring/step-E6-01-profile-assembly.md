@@ -1,6 +1,6 @@
 # Шаг E6-01 — сборка `CandidateProfile.facts`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E2, E3 (резюме-факты), E4 (видео-факты)
 **Перед началом:** прочитай `03_TDD.md` «Candidate Profile — как строится и
 обновляется» (таблица источников, `data_completeness`).
@@ -45,4 +45,19 @@ uv run pytest tests/services/test_candidate_facts.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — `build_or_update_candidate_facts(session, platform_base, llm_client, profile)`
+  (`src/sfera_ai/services/candidate_facts.py`). Триггер — вынесенный из `needs_profile_rebuild`
+  `compute_current_sources_snapshot` (`change_detection.py`, рефакторинг без изменения
+  поведения — 3 старых теста прошли без правок). Батч новых `Answer.text` → один LLM-вызов
+  (JSON `{"facts":[...]}`); `ResumeExtract.structured_data` (оба `source_type`) и видео
+  (`testchecks_transcriptionjob` по `answer_id` кандидата) подмешиваются без LLM. Дедуп
+  фактов по `(key, evidence.source_type, evidence.source_id)` — старые не переписываются.
+  `data_completeness`: 0 источников → `MINIMAL`, 1-2 → `PARTIAL`, 3-4 → `FULL` (решение
+  принято в рамках шага — точных порогов в TDD не было). Новая таблица в reflection:
+  `CANDIDATE_FACTS_TABLES` (`platform_db.py`) = `CHANGE_DETECTION_TABLES` +
+  `testchecks_transcriptionjob`. Вне scope шага (не реализовано здесь): создание
+  `ResumeExtract` для `ANKETA_FILE`-ответа (детекция «какой Answer — резюме» и вызов
+  `process_resume`) — по DoD шага подмешиваются только уже готовые `DONE`-записи;
+  переносится в очередь (`E6-04`) или отдельный шаг. Тесты:
+  `tests/services/test_candidate_facts.py` (6, sqlite in-memory) — все GREEN. Полный
+  сьют `uv run pytest` — 88 passed.

@@ -96,7 +96,9 @@ def detect_and_enqueue(session: Session, platform_base) -> list[AIProcessingJob]
             select(AIProcessingJob.candidate_profile_id).where(AIProcessingJob.status.in_(ACTIVE_STATUSES))
         )
     )
-    existing_profiles = session.scalars(select(CandidateProfile)).all()
+    existing_profiles = session.scalars(
+        select(CandidateProfile).where(CandidateProfile.is_superseded.is_(False))
+    ).all()
     for profile in existing_profiles:
         if profile.id in newly_created_profile_ids or profile.id in profiles_with_active_job:
             continue  # уже есть активная джоба (в этом тике или с прошлого) — она и так пересоберёт профиль

@@ -10,10 +10,12 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def needs_profile_rebuild(platform_base, profile: CandidateProfile) -> bool:
-    """03_TDD.md, раздел «5. Change Detection» — сравнивает `sources_snapshot` профиля
-    с текущим состоянием платформенных источников (Application/Progress/max Answer id/
-    HH negotiation/hh_resume_id). Чистый read-only запрос, без AI-вызовов."""
+def compute_current_sources_snapshot(platform_base, profile: CandidateProfile) -> dict:
+    """03_TDD.md, раздел «5. Change Detection» — текущее состояние платформенных
+    источников (Application/Progress/max Answer id/HH negotiation/hh_resume_id).
+    Чистый read-only запрос, без AI-вызовов. Вынесено из `needs_profile_rebuild`,
+    чтобы E6-01 (`build_or_update_candidate_facts`) могло переиспользовать тот же
+    расчёт и записать его как новый `sources_snapshot` после сборки фактов."""
     Application = platform_base.classes.courses_application
     Progress = platform_base.classes.courses_progress
     Answer = platform_base.classes.testchecks_answer
@@ -45,7 +47,7 @@ def needs_profile_rebuild(platform_base, profile: CandidateProfile) -> bool:
             if profile.hh_negotiation_id is not None
             else None
         )
-        current = {
+        return {
             # платформа — Django-модели, timestamp-поле называется `modified_at`, не
             # `updated_at` (найдено на реальном прогоне на staging 2026-08-27, юнит-тесты
             # с самодельной SQLite-схемой этого разрыва не ловили).
@@ -56,7 +58,23 @@ def needs_profile_rebuild(platform_base, profile: CandidateProfile) -> bool:
             "hh_resume_id": hh_negotiation.hh_resume_id if hh_negotiation else None,
         }
 
-    return current != profile.sources_snapshot
+
+def needs_profile_rebuild(platform_base, profile: CandidateProfile) -> bool:
+    """03_TDD.md, раздел «5. Change Detection» — сравнивает `sources_snapshot` профиля
+    с текущим состоянием платформенных источников."""
+    return compute_current_sources_snapshot(platform_base, profile) != profile.sources_snapshot
+
+
+def get_candidate_id(platform_base, profile: CandidateProfile) -> int | None:
+    """`Application.candidate_id` для профиля, если есть `application_id` — общий
+    ресолвер для сервисов, которым нужен candidate_id для join'а на testchecks_*
+    (переиспользуется `candidate_facts.py`, чтобы не дублировать запрос)."""
+    if profile.application_id is None:
+        return None
+    Application = platform_base.classes.courses_application
+    with PlatformSession(platform_base.engine) as platform_session:
+        application = platform_session.get(Application, profile.application_id)
+        return application.candidate_id if application is not None else None
 
 
 # needs_fit_recalc(profile, course) — TDD 03_TDD.md раздел 5 — отложен до появления

@@ -108,24 +108,24 @@
   когда транскрипт готов.
 
 ### E5 — `AIProcessingJob` + очередь
-- [ ] `epics/E5-processing-queue/step-E5-01-model-migration.md` — модель + Alembic-ревизия.
-- [ ] `epics/E5-processing-queue/step-E5-02-change-detection.md` —
+- [x] `epics/E5-processing-queue/step-E5-01-model-migration.md` — модель + Alembic-ревизия.
+- [x] `epics/E5-processing-queue/step-E5-02-change-detection.md` —
   `needs_profile_rebuild`/`needs_fit_recalc`, чистый SQL, без AI-вызовов
   (`03_TDD.md`, раздел 5).
-- [ ] `epics/E5-processing-queue/step-E5-03-job-creation.md` — детекция событий →
+- [x] `epics/E5-processing-queue/step-E5-03-job-creation.md` — детекция событий →
   постановка джоб по всем 10 `reason`.
-- [ ] `epics/E5-processing-queue/step-E5-04-scheduler-dry-run.md` — свой
+- [x] `epics/E5-processing-queue/step-E5-04-scheduler-dry-run.md` — свой
   APScheduler-процесс (`03_TDD.md`, раздел 6), dry-run режим: реальные AI-вызовы
   выключены флагом. Тест: тик быстрый при пустой очереди, детекция не расходует
   AI-бюджет.
-- [ ] `epics/E5-processing-queue/step-E5-05-stuck-jobs.md` — cron-детектор зависших
+- [x] `epics/E5-processing-queue/step-E5-05-stuck-jobs.md` — cron-детектор зависших
   `PROCESSING` джоб.
-- [ ] `epics/E5-processing-queue/step-E5-06-hh-lead-pii-ttl.md` — TTL-очистка сырого
+- [x] `epics/E5-processing-queue/step-E5-06-hh-lead-pii-ttl.md` — TTL-очистка сырого
   текста резюме (`ResumeExtract.raw_text`) для HH-лидов, не конвертировавшихся в
   платформенного кандидата (решение владельца 2026-08-26, `02_CONTEXT.md`). Готово:
   джобы корректно ставятся по всем трём уровням детекции (раздел 5 `03_TDD.md`), PII
   неконвертировавшихся лидов не хранится бессрочно.
-- [ ] `epics/E5-processing-queue/step-E5-07-merge-detection.md` — детекция
+- [x] `epics/E5-processing-queue/step-E5-07-merge-detection.md` — детекция
   `CandidateMergeLog` (`03_TDD.md`, «Candidate Identity — Merge кандидатов»), owner
   approved 2026-08-26 (`02_CONTEXT.md`) — пропущено в исходной разбивке E2 при
   архитектурном ревью 2026-08-26, добавлено сюда как часть той же tick-driven detection
@@ -138,16 +138,18 @@
   проставляются корректно.
 
 ### E6 — Fit scoring
-- [ ] `epics/E6-fit-scoring/step-E6-01-profile-assembly.md` — сборка
+- [x] `epics/E6-fit-scoring/step-E6-01-profile-assembly.md` — сборка
   `CandidateProfile.facts` из всех источников (резюме/ответы/видео).
-- [ ] `epics/E6-fit-scoring/step-E6-02-analysis-model.md` — `CandidateVacancyAnalysis`
+- [x] `epics/E6-fit-scoring/step-E6-02-analysis-model.md` — `CandidateVacancyAnalysis`
   модель + Alembic (FK `vacancy_profile` — PROTECT).
-- [ ] `epics/E6-fit-scoring/step-E6-03-llm-fit-call.md` — реальный LLM Fit-вызов,
+- [x] `epics/E6-fit-scoring/step-E6-03-llm-fit-call.md` — реальный LLM Fit-вызов,
   версии, `is_current`.
-- [ ] `epics/E6-fit-scoring/step-E6-04-queue-integration.md` — включение реальных
+- [x] `epics/E6-fit-scoring/step-E6-04-queue-integration.md` — включение реальных
   AI-вызовов в очередь (снятие dry-run, первый платный вызов в проде — только на
-  ограниченном пилоте, с подтверждением владельца).
-- [ ] `epics/E6-fit-scoring/step-E6-05-manual-validation.md` — ручной прогон на 10–20
+  ограниченном пилоте, с подтверждением владельца). Диспетчер готов; сам флаг
+  `ai_processing_dry_run` для непрерывной автообработки отложен до деплоя планировщика
+  (E8) — сознательное решение владельца.
+- [x] `epics/E6-fit-scoring/step-E6-05-manual-validation.md` — ручной прогон на 10–20
   реальных кандидатов, сверка адекватности с HR. Готово: `fit_score`+evidence
   сохраняются, повторный прогон без изменений не создаёт новую версию.
 

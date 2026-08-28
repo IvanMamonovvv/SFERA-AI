@@ -1,6 +1,6 @@
 # Шаг E6-02 — `CandidateVacancyAnalysis` модель + Alembic
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1, E2
 **Перед началом:** прочитай `03_TDD.md` «2. Сущности / данные» →
 `CandidateVacancyAnalysis`.
@@ -31,9 +31,9 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] PROTECT на `vacancy_profile` подтверждён тестом (удаление профиля с зависимым
+- [x] PROTECT на `vacancy_profile` подтверждён тестом (удаление профиля с зависимым
       анализом падает)
-- [ ] Alembic upgrade/downgrade чисто
+- [x] Alembic upgrade/downgrade чисто
 
 ## Как проверить
 
@@ -48,4 +48,14 @@ uv run alembic upgrade head
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-27` — модель `CandidateVacancyAnalysis` (`src/sfera_ai/models/candidate_vacancy_analysis.py`),
+  ревизия `0005` (`migrations/versions/0005_ai_candidate_vacancy_analysis.py`), тесты
+  `tests/models/test_candidate_vacancy_analysis.py` (6 тестов). `course_id` без
+  SQLAlchemy `ForeignKey` в модели (как `AIProcessingJob.course_id`) — платформенная
+  таблица `courses_course` не в `Base.metadata`, FK на неё только в raw-миграции.
+  `vacancy_profile_id` — `ForeignKey(..., ondelete="RESTRICT")` (PROTECT), подтверждено
+  тестом с `PRAGMA foreign_keys=ON` на SQLite: удаление `VacancyProfile` с зависимым
+  анализом падает `IntegrityError`. Upgrade head применён на staging через туннель
+  (GRANT REFERENCES на `courses_course` уже был выдан в E1-09, новых grant'ов не
+  потребовалось); upgrade+downgrade полного цикла проверен на отдельной SQLite-БД
+  (staging не даунгрейдился). Полный тест-сьют — 94 passed.
