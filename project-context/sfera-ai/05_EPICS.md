@@ -154,13 +154,13 @@
   сохраняются, повторный прогон без изменений не создаёт новую версию.
 
 ### E7 — Vacancy Feedback/Memory workflow
-- [ ] `epics/E7-feedback-workflow/step-E7-01-models.md` — `VacancyFeedback` +
+- [x] `epics/E7-feedback-workflow/step-E7-01-models.md` — `VacancyFeedback` +
   `VacancyMemory` модели + Alembic.
-- [ ] `epics/E7-feedback-workflow/step-E7-02-interpretation.md` — LLM-интерпретация
+- [x] `epics/E7-feedback-workflow/step-E7-02-interpretation.md` — LLM-интерпретация
   фидбека → `ai_suggested_rule`.
-- [ ] `epics/E7-feedback-workflow/step-E7-03-approve.md` — approve workflow
+- [x] `epics/E7-feedback-workflow/step-E7-03-approve.md` — approve workflow
   (Feedback → Memory), оба сентимента (BOOST/PENALIZE).
-- [ ] `epics/E7-feedback-workflow/step-E7-04-recalc-trigger.md` — триггер пересчёта
+- [x] `epics/E7-feedback-workflow/step-E7-04-recalc-trigger.md` — триггер пересчёта
   затронутых `is_current` анализов при новой Memory/VacancyProfile версии. Готово:
   unit на workflow feedback→approve→memory→пересчёт.
 

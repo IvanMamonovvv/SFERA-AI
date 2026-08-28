@@ -1,6 +1,6 @@
 # Шаг E7-04 — триггер пересчёта затронутых анализов
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E7-03, E5-03 (постановка джоб)
 **Перед началом:** прочитай `03_TDD.md» «Vacancy Profile + Vacancy Memory workflow»
 п.5.
@@ -27,9 +27,9 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Approve фидбека → джобы на все `is_current` анализы `course`, не на все
+- [x] Approve фидбека → джобы на все `is_current` анализы `course`, не на все
       `CandidateVacancyAnalysis` вообще
-- [ ] Повторный триггер без новых изменений — не дублирует уже стоящие джобы
+- [x] Повторный триггер без новых изменений — не дублирует уже стоящие джобы
 
 ## Как проверить
 
@@ -44,4 +44,18 @@ uv run pytest tests/services/test_recalc_trigger.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-28 — `enqueue_fit_recalc_for_course(session, course_id)` в
+  `src/sfera_ai/services/job_detection.py` — берёт `CandidateVacancyAnalysis.is_current`
+  этого `course`, ставит по джобе `reason=VACANCY_PROFILE_CHANGED` на каждый
+  `candidate_profile`, переиспользуя `_create_job_if_absent` (E5-03). `_create_job_if_absent`
+  расширен параметром `course_id` (раньше не участвовал ни в дедуп-запросе, ни в
+  создании джобы — для вакансийных джоб это обязательное поле, «Вакансийные джобы
+  несут `course_id` явно», `job_processing.py`). Хуки подключены в двух местах: конец
+  `approve_feedback` (`vacancy_memory.py`, после commit) и конец
+  `create_vacancy_profile_version` (`vacancy_profile.py`, после commit) — оба вызывают
+  `enqueue_fit_recalc_for_course` напрямую (не через отдельный event/сигнал — прямой
+  вызов проще и достаточен, других подписчиков не предвидится). Тесты —
+  `tests/services/test_recalc_trigger.py` (3: только `is_current` анализы того же
+  `course` получают джобу, повторный вызов не дублирует `PENDING`, `approve_feedback`
+  триггерит recalc сквозным тестом). Полный сьют `uv run pytest` — 128 passed,
+  регрессий нет. **Эпик E7 завершён.**
