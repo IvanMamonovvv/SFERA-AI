@@ -22,3 +22,5 @@ CHANGE_DETECTION_TABLES = (
     "testchecks_testattempt",
     "headhunter_hhnegotiationrecord",
 )
+CANDIDATE_FACTS_TABLES = CHANGE_DETECTION_TABLES + ("testchecks_transcriptionjob",)
+MERGE_DETECTION_TABLES = ("courses_candidatemergelog",)

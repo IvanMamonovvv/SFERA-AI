@@ -31,10 +31,18 @@ def test_dry_run_marks_jobs_done_without_ai_call(tmp_engine):
         assert processed[0].finished_at is not None
 
 
-def test_dry_run_flag_off_fails_instead_of_calling_real_ai(tmp_engine):
-    """DoD: "dry-run флаг подтверждён" — с флагом выключенным джоба падает на
-    NotImplementedError (реальный AI-клиент ещё не подключён, E6/E7), а не тихо проходит
-    как DONE — подтверждает, что без явного dry_run=True реального вызова не происходит."""
+def test_dry_run_flag_off_dispatches_profile_reason_to_candidate_facts(tmp_engine, monkeypatch):
+    """step-E6-04, п.1: профильный reason (не VACANCY_REASONS) → E6-01
+    build_or_update_candidate_facts, ровно один вызов."""
+    import sfera_ai.services.job_processing as job_processing
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: calls.append(profile.id) or profile,
+    )
+
     Base.metadata.create_all(tmp_engine)
     with Session(tmp_engine) as session:
         profile = CandidateProfile(application_id=1, sources_snapshot={})
@@ -45,9 +53,102 @@ def test_dry_run_flag_off_fails_instead_of_calling_real_ai(tmp_engine):
 
         processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
 
-        assert processed[0].status == "FAILED"
-        assert "NotImplementedError" not in processed[0].last_error  # str(exc) без имени класса
-        assert "не реализован" in processed[0].last_error
+        assert processed[0].status == "DONE"
+        assert calls == [profile.id]
+
+
+def test_dry_run_flag_off_dispatches_vacancy_reason_to_fit_scoring(tmp_engine, monkeypatch):
+    """step-E6-04, п.1: вакансийный reason (VACANCY_REASONS) → E6-03 run_fit_scoring."""
+    import sfera_ai.services.job_processing as job_processing
+    from sfera_ai.models.vacancy_profile import VacancyProfile
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "run_fit_scoring",
+        lambda session, *, candidate_profile, vacancy_profile, llm_client: calls.append(
+            (candidate_profile.id, vacancy_profile.id)
+        ),
+    )
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        vacancy = VacancyProfile(course_id=42, version=1, is_current=True, requirements={})
+        session.add_all([profile, vacancy])
+        session.commit()
+        session.add(
+            AIProcessingJob(
+                candidate_profile_id=profile.id, course_id=42, reason="VACANCY_PROFILE_CHANGED"
+            )
+        )
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "DONE"
+        assert calls == [(profile.id, vacancy.id)]
+
+
+def test_no_longer_relevant_job_skips_ai_call(tmp_engine, monkeypatch):
+    """DoD п.1: джоба с уже неактуальным условием (CANDIDATE_DATA_CHANGED, но
+    needs_profile_rebuild уже False) — DONE без AI-вызова, счётчик вызовов == 0."""
+    import sfera_ai.services.job_processing as job_processing
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: calls.append(profile.id) or profile,
+    )
+    monkeypatch.setattr(job_processing, "needs_profile_rebuild", lambda platform_base, profile: False)
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add(
+            AIProcessingJob(candidate_profile_id=profile.id, reason="CANDIDATE_DATA_CHANGED")
+        )
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "DONE"
+        assert calls == []
+
+
+def test_pilot_course_id_skips_jobs_outside_pilot(tmp_engine, monkeypatch):
+    """DoD п.2: pilot_course_id ограничивает реальные AI-вызовы одним course — джоба
+    вне пилота остаётся PENDING, AI не вызывается."""
+    import sfera_ai.services.job_processing as job_processing
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: calls.append(profile.id) or profile,
+    )
+    monkeypatch.setattr(job_processing, "_job_course_id", lambda platform_base, job, profile: 7)
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        job = AIProcessingJob(candidate_profile_id=profile.id, reason="NEW_APPLICATION")
+        session.add(job)
+        session.commit()
+
+        processed = process_batch(
+            session, platform_base=None, limit=5, dry_run=False, pilot_course_id=42
+        )
+
+        assert calls == []
+        assert processed[0].status == "PENDING"
+        session.refresh(job)
+        assert job.status == "PENDING"
 
 
 def test_one_failing_job_does_not_block_others(tmp_engine):

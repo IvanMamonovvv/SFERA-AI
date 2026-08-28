@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.config import Settings
 from sfera_ai.db.session import make_write_engine
 from sfera_ai.platform_db import CHANGE_DETECTION_TABLES, reflect_platform_tables
+from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.job_detection import detect_and_enqueue
 from sfera_ai.services.job_processing import process_batch, requeue_stuck_jobs
 from sfera_ai.services.pii_retention import purge_expired_hh_lead_resumes
@@ -23,14 +24,20 @@ def run_tick(settings: Settings) -> None:
     platform_engine = create_engine(settings.platform_database_url)
     platform_base = reflect_platform_tables(platform_engine, tables=CHANGE_DETECTION_TABLES)
 
+    llm_client = OpenRouterClient(
+        api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url
+    )
+
     with Session(write_engine) as session:
         created = detect_and_enqueue(session, platform_base)
         logger.info("тик: поставлено %d новых джоб", len(created))
         processed = process_batch(
             session,
             platform_base,
+            llm_client,
             limit=settings.ai_analysis_max_concurrent_jobs,
             dry_run=settings.ai_processing_dry_run,
+            pilot_course_id=settings.ai_processing_pilot_course_id,
         )
         logger.info("тик: обработано %d джоб (dry_run=%s)", len(processed), settings.ai_processing_dry_run)
 

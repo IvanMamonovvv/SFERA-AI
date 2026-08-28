@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # при переходе на реальный AI-вызов (E6-04) пересчитать заново по факту latency LLM.
     ai_analysis_max_concurrent_jobs: int = 200
     ai_stuck_job_threshold_hours: int = 2
+    # step-E6-04-queue-integration.md, п.2 DoD — при снятом ai_processing_dry_run
+    # ограничивает реальные AI-вызовы одним course (пилот), пока владелец явно не
+    # расширит охват; None = без пилот-скоупинга (использовать ТОЛЬКО с dry_run=True
+    # или после подтверждённого владельцем расширения пилота).
+    ai_processing_pilot_course_id: int | None = None
     # step-E5-06 — TTL сырого PII резюме hh_negotiation-only лидов (не конвертировались
     # в Application); значение-заглушка, точное число — согласовать с владельцем перед прод.
     resume_pii_ttl_days: int = 90
