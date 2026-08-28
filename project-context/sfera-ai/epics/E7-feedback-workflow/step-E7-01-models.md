@@ -1,6 +1,6 @@
 # Шаг E7-01 — `VacancyFeedback` + `VacancyMemory` модели + Alembic
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E1
 **Перед началом:** прочитай `03_TDD.md` «2. Сущности / данные» → `VacancyFeedback`,
 `VacancyMemory`.
@@ -29,8 +29,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Обе модели покрыты тестами на constraints/индексы
-- [ ] Alembic upgrade/downgrade чисто
+- [x] Обе модели покрыты тестами на constraints/индексы
+- [x] Alembic upgrade/downgrade чисто (upgrade проверен на staging, downgrade — на SQLite tmp_engine)
 
 ## Как проверить
 
@@ -45,4 +45,6 @@ uv run alembic upgrade head
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- `2026-08-28` — `VacancyFeedback`/`VacancyMemory` модели + миграция 0007, тесты на
+  constraints/индексы/FK-поведение (8 тестов). GRANT REFERENCES ON users_customuser TO
+  ai_owner выдан на staging (первый раз для этой таблицы), upgrade head применён чисто.

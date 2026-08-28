@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from sfera_ai.models.vacancy_profile import VacancyProfile
+from sfera_ai.services.job_detection import enqueue_fit_recalc_for_course
 
 
 def create_vacancy_profile_version(
@@ -35,4 +36,6 @@ def create_vacancy_profile_version(
     session.add(new_profile)
     session.commit()
     session.refresh(new_profile)
+
+    enqueue_fit_recalc_for_course(session, course_id)
     return new_profile

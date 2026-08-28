@@ -1,6 +1,6 @@
 # Шаг E7-02 — интерпретация фидбека (LLM `ai_suggested_rule`)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E7-01
 **Перед началом:** прочитай `03_TDD.md` «Vacancy Profile + Vacancy Memory workflow»
 п.1–2, «AI Pipeline» → Feedback interpretation.
@@ -26,8 +26,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] `ai_suggested_rule` заполняется на создании `VacancyFeedback`
-- [ ] Ошибка LLM не блокирует сохранение самого фидбека (`ai_suggested_rule` остаётся
+- [x] `ai_suggested_rule` заполняется на создании `VacancyFeedback`
+- [x] Ошибка LLM не блокирует сохранение самого фидбека (`ai_suggested_rule` остаётся
       пустым, не роняет запрос)
 
 ## Как проверить
@@ -42,4 +42,10 @@ uv run pytest tests/services/test_feedback_interpretation.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано, синхронно или через очередь — и почему>.
+- 2026-08-28 — `interpret_feedback(feedback, llm_client)` в `src/sfera_ai/services/feedback_interpretation.py`.
+  Вызов синхронный (не через `AIProcessingJob`): вызов дешёвый (короткий промпт, `gpt-4o-mini`),
+  задержка на создание фидбека приемлема, отдельная очередь не оправдана. `LLMProviderError`
+  ловится внутри сервиса и не пробрасывается — `ai_suggested_rule` остаётся `""`, сохранение
+  `VacancyFeedback` не блокируется (вызывающий код ещё не написан — эндпоинт создания фидбека вне
+  этого шага, см. следующие шаги эпика E7). Тесты — `tests/services/test_feedback_interpretation.py`
+  (мок `OpenRouterClient`). Логирование через `providers.py.complete()` — как везде в пайплайне.

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session as PlatformSession
 
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
+from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.services.candidate_identity import resolve_or_create_candidate_profile
 from sfera_ai.services.candidate_transition import promote_hh_lead_to_application
 from sfera_ai.services.change_detection import needs_profile_rebuild
@@ -11,24 +12,52 @@ from sfera_ai.services.change_detection import needs_profile_rebuild
 ACTIVE_STATUSES = ("PENDING", "PROCESSING")
 
 
-def _create_job_if_absent(session: Session, *, candidate_profile_id: int, reason: str) -> AIProcessingJob | None:
+def _create_job_if_absent(
+    session: Session, *, candidate_profile_id: int, reason: str, course_id: int | None = None,
+) -> AIProcessingJob | None:
     """Partial UniqueConstraint (candidate_profile, course, reason) WHERE status IN
     (PENDING, PROCESSING) защищает от гонки между процессами; эта проверка — та же
     защита на уровне приложения, без похода в БД дважды на конфликте."""
     existing = session.scalar(
         select(AIProcessingJob).where(
             AIProcessingJob.candidate_profile_id == candidate_profile_id,
+            AIProcessingJob.course_id == course_id,
             AIProcessingJob.reason == reason,
             AIProcessingJob.status.in_(ACTIVE_STATUSES),
         )
     )
     if existing is not None:
         return None
-    job = AIProcessingJob(candidate_profile_id=candidate_profile_id, reason=reason)
+    job = AIProcessingJob(candidate_profile_id=candidate_profile_id, reason=reason, course_id=course_id)
     session.add(job)
     session.commit()
     session.refresh(job)
     return job
+
+
+def enqueue_fit_recalc_for_course(session: Session, course_id: int) -> list[AIProcessingJob]:
+    """03_TDD.md, «Vacancy Profile + Vacancy Memory workflow» п.5 — появление активной
+    `VacancyMemory` или новой `is_current=True` версии `VacancyProfile` ставит
+    `AIProcessingJob(reason=VACANCY_PROFILE_CHANGED)` для всех `is_current`-анализов
+    этого `course` (только пересчёт Fit, без пересборки `CandidateProfile`).
+    Переиспользует дедупликацию `_create_job_if_absent` — повторный вызов без новых
+    `is_current`-анализов не создаёт дублирующих `PENDING`-джоб."""
+    candidate_profile_ids = session.scalars(
+        select(CandidateVacancyAnalysis.candidate_profile_id).where(
+            CandidateVacancyAnalysis.course_id == course_id,
+            CandidateVacancyAnalysis.is_current.is_(True),
+        )
+    ).all()
+
+    created: list[AIProcessingJob] = []
+    for candidate_profile_id in candidate_profile_ids:
+        job = _create_job_if_absent(
+            session, candidate_profile_id=candidate_profile_id,
+            reason="VACANCY_PROFILE_CHANGED", course_id=course_id,
+        )
+        if job is not None:
+            created.append(job)
+    return created
 
 
 def detect_and_enqueue(session: Session, platform_base) -> list[AIProcessingJob]:

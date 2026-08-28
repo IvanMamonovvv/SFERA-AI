@@ -4,7 +4,11 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-28` — эпик **E6 (Fit scoring) полностью завершён**.
+**Последнее обновление:** `2026-08-28` — шаг **E7-04** (триггер пересчёта fit,
+`enqueue_fit_recalc_for_course`) выполнен, **эпик E7 полностью завершён**, детали —
+журнал ниже. Следующий шаг — эпик **E8** (Read API).
+
+`2026-08-28` — эпик **E6 (Fit scoring) полностью завершён**.
 `step-E6-04`/`step-E6-05` закрыты реальными прод-прогонами на `course_id=25` («Менеджер
 по продажам (ШКМ)»): создан CLI `run_fit_scoring_sample.py`, черновой `VacancyProfile`
 id=3, сборка фактов + fit-scoring на 20 реальных кандидатов (≈$0.0004/кандидат по
@@ -90,12 +94,66 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E6-03 | Реальный LLM Fit-вызов, версии, `is_current` (`step-E6-03-llm-fit-call.md`) | DONE | 2026-08-27 |
 | E6-04 | Включение реальных AI-вызовов в очередь (`step-E6-04-queue-integration.md`) | DONE | 2026-08-28 |
 | E6-05 | Ручной прогон и сверка с HR (`step-E6-05-manual-validation.md`) | DONE | 2026-08-28 |
-| E7-01 | Vacancy Feedback/Memory workflow | TODO | — |
+| E7-01 | `VacancyFeedback`/`VacancyMemory` модели + Alembic (`step-E7-01-models.md`) | DONE | 2026-08-28 |
+| E7-02 | Интерпретация фидбека LLM (`step-E7-02-interpretation.md`) | DONE | 2026-08-28 |
+| E7-03 | Approve workflow Feedback → Memory (`step-E7-03-approve.md`) | DONE | 2026-08-28 |
+| E7-04 | Триггер пересчёта fit (`step-E7-04-recalc-trigger.md`) | DONE | 2026-08-28 |
 | E8-01 | Read API | TODO | — |
 | E9-01 | Export | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-28` — шаг `step-E7-04-recalc-trigger.md` выполнен, **эпик E7 (Vacancy
+  Feedback/Memory workflow) полностью завершён**: `enqueue_fit_recalc_for_course(session,
+  course_id)` в `src/sfera_ai/services/job_detection.py` — ставит `AIProcessingJob
+  (reason=VACANCY_PROFILE_CHANGED)` на все `CandidateVacancyAnalysis.is_current` этого
+  `course`, переиспользуя дедупликацию `_create_job_if_absent` (E5-03). Расширен
+  `_create_job_if_absent` параметром `course_id` — раньше не участвовал ни в проверке
+  дублей, ни в создании джобы (для профильных reason это было не нужно, всегда `None`,
+  но для вакансийных джоб `course_id` обязателен явно — см. `job_processing.py`).
+  Хуки подключены прямым вызовом (без событий/сигналов) в двух местах: конец
+  `approve_feedback` (`vacancy_memory.py`) и конец `create_vacancy_profile_version`
+  (`vacancy_profile.py`), оба после своего `commit()`. Тесты —
+  `tests/services/test_recalc_trigger.py` (3). Полный сьют `uv run pytest` —
+  128 passed, регрессий нет. Следующий шаг — эпик **E8** (Read API), по графу
+  зависимостей `05_EPICS.md` (`E1, E2, E6, E7 → E8`).
+- `2026-08-28` — шаг `step-E7-03-approve.md` выполнен: `approve_feedback(session,
+  feedback, approved_by, weight_hint=None)` в `src/sfera_ai/services/vacancy_memory.py` —
+  маппинг сентимента на `weight_hint` (`NEGATIVE`→`PENALIZE`, `POSITIVE`→`BOOST`,
+  `NEUTRAL`→`INFO_ONLY`, явный параметр перекрывает). `rule_text` из
+  `feedback.ai_suggested_rule` (E7-02). Одна транзакция:
+  `VacancyMemory(is_active=True)` + `feedback.applied=True`. Повторный approve —
+  `FeedbackAlreadyAppliedError` (явная ошибка, не no-op). Тесты
+  `tests/services/test_vacancy_memory_approve.py` — 5. Полный сьют `uv run pytest` —
+  125 passed, регрессий нет. Следующий шаг — `step-E7-04-recalc-trigger.md`.
+- `2026-08-28` — шаг `step-E7-02-interpretation.md` выполнен:
+  `interpret_feedback(feedback, llm_client)` в `src/sfera_ai/services/feedback_interpretation.py`
+  (промпт `text`+`sentiment` → короткое правило, `gpt-4o-mini` через `OpenRouterClient`,
+  `prompt_version="feedback-interpretation-v1"`). Решение зафиксировано: вызов
+  **синхронный**, не через `AIProcessingJob` — дешёвый, отдельная очередь не оправдана.
+  `LLMProviderError` перехватывается внутри сервиса, `ai_suggested_rule` остаётся `""`
+  без падения запроса (DoD п.2). Эндпоинт создания `VacancyFeedback`, который будет
+  вызывать этот сервис, ещё не написан — вне scope этого шага (следующие шаги эпика
+  E7). Тесты `tests/services/test_feedback_interpretation.py` — 2 (успешный вызов с
+  парсингом промпта, ошибка провайдера → пустая строка). Полный сьют `uv run pytest` —
+  120 passed, регрессий нет.
+- `2026-08-28` — шаг `step-E7-01-models.md` выполнен: модели `VacancyFeedback`
+  (`src/sfera_ai/models/vacancy_feedback.py`) и `VacancyMemory`
+  (`src/sfera_ai/models/vacancy_memory.py`), одна ревизия `0007` на обе таблицы
+  (`migrations/versions/0007_ai_vacancy_feedback_memory.py`) — по прецеденту 0005.
+  `course_id`/`author_id`/`approved_by_id` — платформенные FK (`courses_course`,
+  `users_customuser`), без `ForeignKey()` в ORM-модели, констрейнт только в raw-миграции
+  (паттерн `AIProcessingJob`/`CandidateVacancyAnalysis`); `candidate_profile_id`
+  (CASCADE), `analysis_id` (SET NULL), `source_feedback_id` (SET NULL) — внутренние
+  `ai_*` FK с `ForeignKey()`. Индексы `(course_id, applied)` и `(course_id, is_active)`.
+  Тесты `tests/models/test_vacancy_feedback.py`/`test_vacancy_memory.py` — 8 (constraints,
+  индексы, CASCADE/SET NULL поведение на SQLite с `PRAGMA foreign_keys=ON`). Новый GRANT:
+  `GRANT REFERENCES ON users_customuser TO ai_owner` — первый раз для этой таблицы
+  (см. [[project_grant_references_pattern]]), выдан на staging через VPS+`docker exec`.
+  Upgrade head применён на staging через туннель (`0006`→`0007`), downgrade проверен
+  только на SQLite `tmp_engine` (правило — не даунгрейдить shared staging). Полный
+  сьют `uv run pytest` — 118 passed, регрессий нет. Следующий шаг — `step-E7-02` (по
+  `epics/E7-feedback-workflow/`, если есть) либо эпик E8.
 - `2026-08-28` — эпик **E6 (Fit scoring) завершён**: `step-E6-04-queue-integration.md`
   и `step-E6-05-manual-validation.md` закрыты. Реальный прод-прогон на `course_id=25`
   («Менеджер по продажам (ШКМ)», найден по UUID `fb16645fbe35418ea3342734becc489b` через
