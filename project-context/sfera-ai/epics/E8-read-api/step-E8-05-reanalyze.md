@@ -1,6 +1,6 @@
 # Шаг E8-05 — `reanalyze` эндпоинт
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E8-01, E5
 
 ## Цель
@@ -24,8 +24,8 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Джоба создаётся с `reason=MANUAL`
-- [ ] Повторный запрос в пределах rate-limit окна — понятная ошибка, не дубль-джоба
+- [x] Джоба создаётся с `reason=MANUAL`
+- [x] Повторный запрос в пределах rate-limit окна — понятная ошибка, не дубль-джоба
 
 ## Как проверить
 
@@ -40,4 +40,10 @@ uv run pytest tests/api/test_reanalyze.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано, выбранный порог rate-limit>.
+- `2026-08-28` — `POST .../candidates/{id}/reanalyze/` (`src/sfera_ai/api/routes/candidates.py`):
+  проверка кандидата через `get_candidate_detail` (404 если нет анализа), затем
+  `enqueue_manual_reanalyze` (`src/sfera_ai/services/job_detection.py`) ставит
+  `AIProcessingJob(reason=MANUAL)`. Rate-limit — 5 минут на кандидата (решение
+  владельца), по времени создания последней MANUAL-джобы (не по активным статусам,
+  как в `_create_job_if_absent` — ручная джоба обычно уже DONE к повторному клику);
+  повтор в окне → `ReanalyzeRateLimitedError` → 429. Тесты — `tests/api/test_reanalyze.py`.

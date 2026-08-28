@@ -4,9 +4,12 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-28` — шаг **E7-04** (триггер пересчёта fit,
-`enqueue_fit_recalc_for_course`) выполнен, **эпик E7 полностью завершён**, детали —
-журнал ниже. Следующий шаг — эпик **E8** (Read API).
+**Последнее обновление:** `2026-08-28` — шаг **E8-05** (`reanalyze`) выполнен, эпик
+**E8 (Read API) полностью завершён**. Следующий по графу — **E9 (Export)**, но он
+«по запросу, после появления UI» (`05_EPICS.md`) — не начинать автоматически.
+
+`2026-08-28` — эпик **E7 (Vacancy Feedback/Memory workflow) полностью завершён**
+(шаг `E7-04`, триггер пересчёта fit).
 
 `2026-08-28` — эпик **E6 (Fit scoring) полностью завершён**.
 `step-E6-04`/`step-E6-05` закрыты реальными прод-прогонами на `course_id=25` («Менеджер
@@ -98,11 +101,78 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E7-02 | Интерпретация фидбека LLM (`step-E7-02-interpretation.md`) | DONE | 2026-08-28 |
 | E7-03 | Approve workflow Feedback → Memory (`step-E7-03-approve.md`) | DONE | 2026-08-28 |
 | E7-04 | Триггер пересчёта fit (`step-E7-04-recalc-trigger.md`) | DONE | 2026-08-28 |
-| E8-01 | Read API | TODO | — |
+| E8-01 | Веб-слой сервиса, каркас (`step-E8-01-framework-scaffold.md`) | DONE | 2026-08-28 |
+| E8-02 | `summary`/`candidates` список (`step-E8-02-summary-list.md`) | DONE | 2026-08-28 |
+| E8-03 | Карточка кандидата + история версий (`step-E8-03-candidate-detail-history.md`) | DONE | 2026-08-28 |
+| E8-04 | `vacancy-profile`/`feedback` CRUD + approve (`step-E8-04-vacancy-feedback-crud.md`) | DONE | 2026-08-28 |
+| E8-05 | `reanalyze` (`step-E8-05-reanalyze.md`) | DONE | 2026-08-28 |
 | E9-01 | Export | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-28` — шаг `step-E8-05-reanalyze.md` выполнен, **эпик E8 (Read API)
+  полностью завершён**. `POST .../candidates/{id}/reanalyze/`
+  (`src/sfera_ai/api/routes/candidates.py`) проверяет кандидата через
+  `get_candidate_detail` (404), ставит `AIProcessingJob(reason=MANUAL)` через новую
+  `enqueue_manual_reanalyze` (`src/sfera_ai/services/job_detection.py`). Rate-limit —
+  5 минут на кандидата (порог подтверждён владельцем), по времени создания последней
+  MANUAL-джобы (не по активным статусам — ручная джоба к повторному клику обычно уже
+  DONE); повтор в окне → 429. Тесты — `tests/api/test_reanalyze.py` (3, TDD). Полный
+  сьют `uv run pytest` — 159 passed, регрессий нет. Следующий по графу — E9 (Export),
+  но не начинать: он «по запросу, после появления UI».
+- `2026-08-28` — шаг `step-E8-04-vacancy-feedback-crud.md` выполнен: `GET/POST
+  .../vacancy-profile/`, `GET/POST .../feedback/`, `POST .../feedback/{id}/approve/`
+  (`src/sfera_ai/api/routes/vacancy.py`). POST `vacancy-profile/` переиспользует
+  `create_vacancy_profile_version` (E1), POST `feedback/` синхронно вызывает
+  `interpret_feedback` (E7-02), `approve/` — `approve_feedback` (E7-03, сам триггерит
+  пересчёт fit из E7-04). Повторный approve → 409, неизвестный id/чужой course → 404,
+  невалидное тело (Pydantic) → 422. Общие FastAPI-зависимости вынесены в новый
+  `src/sfera_ai/api/deps.py` (использует и `candidates.py`, без изменения поведения);
+  `create_app()` получил `llm_client_factory`. Тесты — `tests/api/test_vacancy_endpoints.py`
+  (14, TDD: сначала RED — 404 без роутов, потом реализация). Полный сьют `uv run pytest`
+  — 156 passed, регрессий нет. Следующий шаг — `step-E8-05-reanalyze.md`.
+- `2026-08-28` — шаг `step-E8-03-candidate-detail-history.md` выполнен:
+  `GET .../candidates/{candidate_profile_id}/` и `.../history/`
+  (`src/sfera_ai/api/routes/candidates.py`, `src/sfera_ai/services/api_read.py`).
+  `get_candidate_detail` — все версии `CandidateVacancyAnalysis` по candidate+course,
+  пусто → `None` → 404; `current` (полный набор полей, включая evidence/strengths/risks),
+  `facts` из `CandidateProfile.facts`, сжатая `history` (`id`/`version`/`fit_score`/
+  `analyzed_at`/`changed` — какие поля изменились относительно предыдущей версии).
+  `get_candidate_history` — полный список версий с `input_snapshot_diff`
+  (человекочитаемо: только реально изменившиеся ключи, `{key: {old, new}}`).
+  Тесты — `tests/api/test_candidate_detail.py` (5). Полный сьют `uv run pytest` —
+  145 passed, регрессий нет. Детали — журнал step-файла.
+- `2026-08-28` — шаг `step-E8-02-summary-list.md` выполнен: `GET .../summary/` и
+  `GET .../candidates/` (`src/sfera_ai/api/routes/candidates.py`,
+  `src/sfera_ai/services/api_read.py`). `{course_uuid}` из URL резолвится в платформенный
+  `Course.id` через reflection (`platform_db.API_READ_TABLES`); неизвестный `course_uuid`
+  → 404. `summary` — total/processed/queued/errors по `AIProcessingJob`/
+  `CandidateVacancyAnalysis`, без похода в платформенные `Application`. `candidates` —
+  offset-пагинация (`limit`/`offset`, `limit≤200`), контрактные поля включая `fit_delta`
+  (версия vs версия-1) и `demo_progress` (своя копия формулы `Progress.completed_lessons/
+  total_lessons*100` — третья копия в системе, осознанное решение владельца, т.к.
+  AI-сервис не может импортировать Django-код платформы). `create_app()` — новый параметр
+  `platform_engine_factory`. Тесты — `tests/api/test_candidates_list.py` (7). Полный сьют
+  `uv run pytest` — 140 passed, регрессий нет. Детали — журнал step-файла.
+- `2026-08-28` — шаг `step-E8-01-framework-scaffold.md` выполнен: фреймворк FastAPI
+  (`src/sfera_ai/api/app.py`, `create_app(*, engine_factory, bff_shared_secret=None)`),
+  `/health` (реальный `SELECT 1` через движок, не заглушка). `app = create_app()` НЕ на
+  уровне модуля — uvicorn запускается factory-режимом
+  (`uvicorn sfera_ai.api.app:create_app --factory`), иначе `Settings()` падала бы на
+  любом импорте модуля без полного `.env`. `src/sfera_ai/api/routes/__init__.py` —
+  пустой `APIRouter(prefix="/api/v1/courses/{course_uuid}/ai-analysis")` по `03_TDD.md`
+  (эндпоинты — следующие шаги E8). Auth — shared-secret заголовок
+  `X-BFF-Shared-Secret` (`src/sfera_ai/api/auth.py`), новое required-поле
+  `Settings.bff_shared_secret`; `.env`/`.env.example` под запретом правки агента —
+  владелец дописал `BFF_SHARED_SECRET` в `.env` (2026-08-28). `Dockerfile` CMD
+  заменён с временного `smoke_test` на реальный uvicorn-entrypoint. Тесты
+  `tests/api/test_health.py` (2) + `tests/api/test_auth.py` (3). Ручная проверка —
+  сервер поднят локально, `curl localhost:8123/health` → `{"status":"ok"}` HTTP 200.
+  Полный сьют `uv run pytest` — 133 passed, регрессий нет. Открытый пункт вне
+  scope: подключение BFF-прокси SPHERA (`SPHERA/src/app/api/proxy/`) к AI-сервису
+  ещё не сделано — существующий прокси проксирует только к `sfera_backend`,
+  отдельная задача во фронтенд-репозитории. Следующий шаг — `step-E8-02`
+  (`epics/E8-read-api/`).
 - `2026-08-28` — шаг `step-E7-04-recalc-trigger.md` выполнен, **эпик E7 (Vacancy
   Feedback/Memory workflow) полностью завершён**: `enqueue_fit_recalc_for_course(session,
   course_id)` в `src/sfera_ai/services/job_detection.py` — ставит `AIProcessingJob

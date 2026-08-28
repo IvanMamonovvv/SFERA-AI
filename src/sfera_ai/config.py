@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     openrouter_api_key: str
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
+    # step-E8-01-framework-scaffold.md — минимальная защита веб-слоя: BFF-прокси SPHERA
+    # передаёт этот заголовок на каждый запрос к AI-сервису, без него — 401.
+    bff_shared_secret: str
+
     # 03_TDD.md, «6. Processing Queue» — снимается только для ограниченного пилота
     # (step-E6-04-queue-integration.md), по умолчанию True — реальные AI-вызовы выключены.
     ai_processing_dry_run: bool = True

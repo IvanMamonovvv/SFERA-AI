@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session as PlatformSession
@@ -10,6 +12,12 @@ from sfera_ai.services.candidate_transition import promote_hh_lead_to_applicatio
 from sfera_ai.services.change_detection import needs_profile_rebuild
 
 ACTIVE_STATUSES = ("PENDING", "PROCESSING")
+MANUAL_REANALYZE_RATE_LIMIT = timedelta(minutes=5)
+
+
+class ReanalyzeRateLimitedError(Exception):
+    """Ручной reanalyze этого кандидата уже ставился в пределах rate-limit окна
+    (step-E8-05, порог 5 минут — решение владельца, 2026-08-28)."""
 
 
 def _create_job_if_absent(
@@ -29,6 +37,31 @@ def _create_job_if_absent(
     if existing is not None:
         return None
     job = AIProcessingJob(candidate_profile_id=candidate_profile_id, reason=reason, course_id=course_id)
+    session.add(job)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def enqueue_manual_reanalyze(
+    session: Session, *, candidate_profile_id: int, course_id: int | None = None,
+) -> AIProcessingJob:
+    """step-E8-05 — ручной reanalyze всегда ставится (без проверки needs_profile_rebuild,
+    в отличие от `_create_job_if_absent`), но защищён rate-limit окном по времени
+    создания последней MANUAL-джобы этого кандидата, а не по активным статусам —
+    предыдущая ручная джоба обычно уже DONE к моменту повторного клика."""
+    cutoff = datetime.now(UTC) - MANUAL_REANALYZE_RATE_LIMIT
+    recent = session.scalar(
+        select(AIProcessingJob).where(
+            AIProcessingJob.candidate_profile_id == candidate_profile_id,
+            AIProcessingJob.reason == "MANUAL",
+            AIProcessingJob.created_at >= cutoff,
+        )
+    )
+    if recent is not None:
+        raise ReanalyzeRateLimitedError(candidate_profile_id)
+
+    job = AIProcessingJob(candidate_profile_id=candidate_profile_id, reason="MANUAL", course_id=course_id)
     session.add(job)
     session.commit()
     session.refresh(job)

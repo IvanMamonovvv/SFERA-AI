@@ -24,3 +24,4 @@ CHANGE_DETECTION_TABLES = (
 )
 CANDIDATE_FACTS_TABLES = CHANGE_DETECTION_TABLES + ("testchecks_transcriptionjob",)
 MERGE_DETECTION_TABLES = ("courses_candidatemergelog",)
+API_READ_TABLES = ("courses_course", "courses_application", "courses_progress")
