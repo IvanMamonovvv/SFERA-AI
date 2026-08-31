@@ -1,6 +1,6 @@
 # Шаг E9-02 — оригинал резюме + видеовизитка
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E9-01
 **Перед началом:** прочитай `03_TDD.md» «Future Export» (переиспользование
 `collect_candidate_archive_entries`-подобной логики — **своя реализация**, чужой код
@@ -43,4 +43,12 @@ uv run pytest tests/services/test_export_files.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано>.
+- 2026-08-28 — `collect_export_files(session, platform_base, candidate_profile_id, *, hh_client,
+  s3_client, s3_bucket) -> dict` в `src/sfera_ai/services/export/files.py`. Резюме — переиспользует
+  готовый `fetch_resume_bytes` (E3-02) на последнем `ResumeExtract(status="DONE")` кандидата.
+  Видео — join `testchecks_answer` → `testchecks_testattempt` → `testchecks_transcriptionjob`
+  (`status="DONE"`) по `candidate_id` (переиспользован `get_candidate_id` из E5-02), затем
+  скачивание `Answer.file` через S3. Оба блока результата — `{"available": bool, "bytes": ...}`,
+  `S3 get_object` ошибка (файл удалён через 30 дней) ловится и не падает — `available: False`,
+  export продолжается. 4 теста: оба файла доступны / видео истекло (resume не затронут) / нет
+  `ResumeExtract` / неизвестный `candidate_profile_id`. Полный набор — 166 пройдено.

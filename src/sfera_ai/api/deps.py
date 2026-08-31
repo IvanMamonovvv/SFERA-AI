@@ -23,6 +23,18 @@ def get_llm_client(request: Request) -> OpenRouterClient:
     return request.app.state.llm_client
 
 
+def get_hh_client(request: Request):
+    return request.app.state.hh_client
+
+
+def get_s3_client(request: Request):
+    return request.app.state.s3_client
+
+
+def get_s3_bucket(request: Request) -> str:
+    return request.app.state.s3_bucket
+
+
 def resolve_course_or_404(platform_engine: Engine, course_uuid: str) -> tuple[int, object]:
     platform_base = reflect_platform_tables(platform_engine, tables=API_READ_TABLES)
     course_id = resolve_course_id(platform_base, course_uuid)

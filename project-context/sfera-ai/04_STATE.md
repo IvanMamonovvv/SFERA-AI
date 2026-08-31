@@ -4,9 +4,19 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-28` — шаг **E8-05** (`reanalyze`) выполнен, эпик
-**E8 (Read API) полностью завершён**. Следующий по графу — **E9 (Export)**, но он
-«по запросу, после появления UI» (`05_EPICS.md`) — не начинать автоматически.
+**Последнее обновление:** `2026-08-31` — шаг **E9-04** (стилизация AI-карточки под
+визуал ai-screening-hub) выполнен по прямому запросу владельца, поверх уже
+завершённого roadmap E0–E9. Детали — журнал `step-E9-04-styled-candidate-card.md`.
+
+`2026-08-31` — шаг **E9-03** выполнен, **эпик E9 (Export)
+и весь roadmap E0–E9 полностью завершены**. Формат согласован с владельцем: zip на
+несколько кандидатов, `POST .../export/` (`src/sfera_ai/api/routes/export.py`),
+подпапка на кандидата (`card.pdf`/`resume.<ext>`/`video.mp4`, недоступное —
+`manifest.txt`). Детали — журнал `step-E9-03-export-endpoint.md`.
+
+`2026-08-28` — шаг **E9-01** (AI-карточка PDF, сервисный слой) выполнен по прямому
+запросу владельца. `05_EPICS.md` помечал E9 «по запросу, после появления UI» — этот
+шаг взят раньше UI по явному указанию.
 
 `2026-08-28` — эпик **E7 (Vacancy Feedback/Memory workflow) полностью завершён**
 (шаг `E7-04`, триггер пересчёта fit).
@@ -70,9 +80,8 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Текущий следующий шаг
 
-Эпики E0–E6 завершены. Следующий — эпик **E7** (Vacancy Feedback/Memory workflow,
-зависит только от E1) по графу зависимостей `05_EPICS.md`. E8 (Read API) не начинать
-раньше E7 — явная зависимость.
+Весь roadmap E0–E9 завершён. Открытых шагов нет — дальнейшая работа по явному
+запросу владельца (новые фичи/правки поверх готового плана).
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -106,10 +115,43 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E8-03 | Карточка кандидата + история версий (`step-E8-03-candidate-detail-history.md`) | DONE | 2026-08-28 |
 | E8-04 | `vacancy-profile`/`feedback` CRUD + approve (`step-E8-04-vacancy-feedback-crud.md`) | DONE | 2026-08-28 |
 | E8-05 | `reanalyze` (`step-E8-05-reanalyze.md`) | DONE | 2026-08-28 |
-| E9-01 | Export | TODO | — |
+| E9-01 | AI-карточка PDF (`step-E9-01-ai-card-pdf.md`) | DONE | 2026-08-28 |
+| E9-02 | Оригинал резюме + видеовизитка (`step-E9-02-resume-video-bundle.md`) | DONE | 2026-08-28 |
+| E9-03 | Export-эндпоинт (`step-E9-03-export-endpoint.md`) | DONE | 2026-08-31 |
+| E9-04 | Стилизация AI-карточки (`step-E9-04-styled-candidate-card.md`) | DONE | 2026-08-31 |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-31` — шаг `step-E9-04-styled-candidate-card.md` выполнен: `ai_card.py`
+  пересобран на `Table`-блоках reportlab (визуал как в ai-screening-hub — чёрная
+  плашка, синий подзаголовок, блок рекомендации с акцентной полосой, два столбца
+  сильные стороны/что уточнить, серый блок платформы, таблица баллов с цветом по
+  порогу, `KeepTogether` — одна страница на кандидата). `full_name` — из последнего
+  `ResumeExtract.status="DONE".structured_data["full_name"]`, `_SYSTEM_PROMPT` в
+  `resume_extraction.py` дополнен этим полем. `candidate_display_name` получил
+  опциональный `full_name`-параметр (обратная совместимость с `archive.py`,
+  который не менялся — вне периметра шага). `CONFIDENCE_RU`-маппинг сверен с
+  `fit_scoring.py` (`LOW/MEDIUM/HIGH`) — не менялся. Тесты — `test_ai_card_export.py`
+  (8, было 4). Полный сьют `uv run pytest` — 176 passed, регрессий нет.
+- `2026-08-28` — шаг `step-E9-02-resume-video-bundle.md` выполнен:
+  `collect_export_files(session, platform_base, candidate_profile_id, *, hh_client, s3_client,
+  s3_bucket) -> dict` в `src/sfera_ai/services/export/files.py`. Резюме — переиспользует готовый
+  `fetch_resume_bytes` (E3-02) на последнем `ResumeExtract(status="DONE")` кандидата. Видео —
+  join `testchecks_answer` → `testchecks_testattempt` → `testchecks_transcriptionjob`
+  (`status="DONE"`) по `candidate_id` (переиспользован `get_candidate_id` из E5-02), затем
+  скачивание `Answer.file` через S3. Оба блока результата — `{"available": bool, "bytes": ...}`,
+  ошибка `S3 get_object` (видео удалено через 30 дней) ловится, не падает — `available: False`,
+  export продолжается без файла. Тесты `tests/services/test_export_files.py` — 4. Полный сьют
+  `uv run pytest` — 166 passed, регрессий нет.
+- `2026-08-28` — шаг `step-E9-01-ai-card-pdf.md` выполнен. `render_ai_card_pdf(session,
+  candidate_profile_id, course_id) -> bytes | None` в
+  `src/sfera_ai/services/export/ai_card.py` — рендерит текущую версию
+  `CandidateVacancyAnalysis` (summary/strengths/risks/gaps) + `CandidateProfile.facts`
+  через `reportlab` (чистый Python, без cairo/pango — легче для Docker на staging).
+  `None`, если для кандидата нет текущей версии анализа. Веб-роут не добавлялся — шаг
+  только сервисный слой, по TDD. Тесты — `tests/services/test_ai_card_export.py` (3:
+  полные данные / частичные / нет анализа). Зависимость `reportlab` добавлена в
+  `pyproject.toml` через `uv add`.
 - `2026-08-28` — шаг `step-E8-05-reanalyze.md` выполнен, **эпик E8 (Read API)
   полностью завершён**. `POST .../candidates/{id}/reanalyze/`
   (`src/sfera_ai/api/routes/candidates.py`) проверяет кандидата через
