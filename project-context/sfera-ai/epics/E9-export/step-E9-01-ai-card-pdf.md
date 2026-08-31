@@ -1,6 +1,6 @@
 # Шаг E9-01 — AI-карточка PDF
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend · **Зависит от:** E6, E8
 **Перед началом:** прочитай `03_TDD.md» «Future Export».
 
@@ -23,7 +23,7 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] PDF генерируется на кандидате с полными данными и на кандидате с частичными
+- [x] PDF генерируется на кандидате с полными данными и на кандидате с частичными
       (не падает на отсутствующих полях)
 
 ## Как проверить
@@ -38,4 +38,9 @@ uv run pytest tests/services/test_ai_card_export.py -v
 
 ## Журнал
 
-- `YYYY-MM-DD` — <что сделано, выбранная библиотека>.
+- 2026-08-28 — `render_ai_card_pdf(session, candidate_profile_id, course_id) -> bytes | None`
+  в `src/sfera_ai/services/export/ai_card.py`. Библиотека — `reportlab` (чистый Python,
+  без системных зависимостей cairo/pango, что важно для Docker-образа на staging).
+  `None` — нет текущей версии `CandidateVacancyAnalysis` (кандидат ещё не анализировался).
+  3 теста: полные данные / частичные (пустые facts, strengths, risks, gaps, fit_score=None) /
+  нет анализа.

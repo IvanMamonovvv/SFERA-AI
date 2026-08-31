@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from sfera_ai.api.routes import candidates, vacancy
+from sfera_ai.api.routes import candidates, export, vacancy
 
 # 03_TDD.md, «3. API / контракты» — неймспейс, не пересекающийся с существующими
 # сериализаторами кандидата в sfera_backend. Эндпоинты добавляются следующими
@@ -8,3 +8,4 @@ from sfera_ai.api.routes import candidates, vacancy
 router = APIRouter(prefix="/api/v1/courses/{course_uuid}/ai-analysis", tags=["ai-analysis"])
 router.include_router(candidates.router)
 router.include_router(vacancy.router)
+router.include_router(export.router)
