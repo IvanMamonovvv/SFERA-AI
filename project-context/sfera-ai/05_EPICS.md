@@ -24,6 +24,7 @@
 | E7 | Vacancy Feedback/Memory workflow | E1 | низкий |
 | E8 | Read API для будущего UI | E1, E2, E6, E7 | низкий |
 | E9 | Export (по запросу, после появления UI) | E6, E8 | — |
+| E10 | Ручной прогон вакансии + сборка портрета из ссылки (CLI, demo без UI) | E6, E9 | средний (реальные LLM-вызовы на всех кандидатах вакансии) |
 
 ## Разбивка на шаги
 
@@ -187,6 +188,41 @@
 - [ ] `epics/E9-export/step-E9-03-export-endpoint.md` — export-эндпоинт/CLI, формат
   выдачи согласовать с владельцем на момент реализации. По запросу, после появления UI
   выбора кандидатов (`03_TDD.md`, «Future Export»).
+- [x] `epics/E9-export/step-E9-04-styled-candidate-card.md` — стилизация AI-карточки
+  под визуал ai-screening-hub (reportlab Table-блоки).
+
+### E10 — Ручной прогон вакансии + сборка портрета из ссылки
+
+По прямому запросу владельца (2026-08-31) — проверить бэкенд-логику отбора на реальной
+вакансии без фронтенда, до появления UI.
+
+- [ ] `epics/E10-manual-screening/step-E10-01-full-course-screening.md` — CLI:
+  все кандидаты вакансии (не выборка) через resume+facts+fit-scoring, zip карточек
+  прошедших порог `fit_score > 75`. Требует новую функцию поиска анкетного резюме
+  (гэп из E3/E5) и новый `GRANT SELECT` на `testchecks_question`.
+- [ ] `epics/E10-manual-screening/step-E10-02-vacancy-profile-from-portrait.md` — CLI:
+  портрет кандидата (+опционально ссылка на открытое описание вакансии) → LLM-синтез
+  `VacancyProfile.requirements`.
+
+### E11 — Проверка fit-score на реальных резюме (backend-туннель)
+
+По прямому запросу владельца (2026-09-01) — на реальном прогоне E10-01 (course_id=39)
+обнаружено, что resume-extraction падает при ручном локальном прогоне (DNS: backend
+резолвится только изнутри docker-сети VPS), fit-scoring прошёл только по анкете.
+
+- [ ] `epics/E11-backend-tunnel-verification/step-E11-01-backend-http-tunnel.md` — HTTP-туннель
+  к backend-контейнеру с локальной машины (по паттерну `tunnel-platform-db.sh`).
+- [ ] `epics/E11-backend-tunnel-verification/step-E11-02-reverify-borderline-candidates.md` —
+  пересборка resume+facts+fit для 6 погранично прошедших кандидатов (`fit_score=75`)
+  курса 39 с реальным резюме, сравнение «было/стало».
+
+### E12 — Кириллица в PDF-экспорте
+
+Найдено 2026-09-01 на реальной AI-карточке: весь русский текст в PDF рендерится чёрными
+прямоугольниками (`Helvetica` не поддерживает кириллицу).
+
+- [ ] `epics/E12-pdf-cyrillic-fix/step-E12-01-cyrillic-font.md` — TTF-шрифт с кириллицей
+  в `ai_card.py` вместо `Helvetica`.
 
 ## Граф зависимостей
 
@@ -198,3 +234,6 @@ E1, E2, E5 → E6 (E4 — опциональный вход: если ещё н�
 E1 → E7
 E1, E2, E6, E7 → E8
 E6, E8 → E9
+E6, E9 → E10
+E10 → E11
+E9 → E12

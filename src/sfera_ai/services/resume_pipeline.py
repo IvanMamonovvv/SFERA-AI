@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as PlatformSession
 
 from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.models.resume_extract import ResumeExtract
@@ -22,6 +23,24 @@ def _sniff_mime_type(file_bytes: bytes) -> str:
     if file_bytes.startswith(_DOCX_MAGIC):
         return _DOCX_MIME
     raise TextExtractionError(f"не удалось определить mime_type файла (magic bytes: {file_bytes[:8]!r})")
+
+
+def find_anketa_resume_answer_id(platform_base, candidate_id: int) -> int | None:
+    """Анкетное резюме — `Answer` с `question.question_text == "ANKETA_RESUME"`
+    (03_TDD.md, «Resume Pipeline» — гэп из E3/E5, закрыт в step-E10-01). Берёт
+    последний по `answered_at`, `None` — если файл не загружен."""
+    Answer = platform_base.classes.testchecks_answer
+    Question = platform_base.classes.testchecks_question
+    TestAttempt = platform_base.classes.testchecks_testattempt
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.scalar(
+            select(Answer.id)
+            .join(Question, Answer.question_id == Question.id)
+            .join(TestAttempt, Answer.attempt_id == TestAttempt.id)
+            .where(Question.question_text == "ANKETA_RESUME", TestAttempt.candidate_id == candidate_id)
+            .order_by(Answer.answered_at.desc())
+            .limit(1)
+        )
 
 
 def process_resume(
