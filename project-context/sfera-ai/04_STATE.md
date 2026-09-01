@@ -4,7 +4,33 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-08-31` — шаг **E9-04** (стилизация AI-карточки под
+**Последнее обновление:** `2026-09-01` — на реальном прогоне E10-01 (course_id=39,
+«РТХ Менеджер по продажам B2B») найдены два новых пробела, заведены отдельными эпиками
+**E11** (resume-extraction не работает при ручном прогоне с локальной машины — backend
+резолвится только изнутри docker-сети VPS, DNS-ошибка; весь прогон 90 кандидатов прошёл
+без резюме, только по анкете) и **E12** (в PDF AI-карточки кириллица рендерится чёрными
+прямоугольниками — `Helvetica` без поддержки кириллицы). Оба — `TODO`, план шагов готов,
+реализация не начата (ждёт «начинай» от владельца). Детали — `epics/E11-backend-tunnel-verification/`,
+`epics/E12-pdf-cyrillic-fix/`.
+
+В тот же день реально использован E10-02 (создан `VacancyProfile` id=4 для `course_id=39`
+из портрета владельца) и выданы два новых грантa `ai_readonly`: `testchecks_question`
+(планово, для E10-01) и `headhunter_vacancycoursemapping` (ad-hoc, для сверки числа
+кандидатов на курсе — платформенный UI показывает заявки+HH-лиды вместе, БД считает их
+раздельно). Также найдено и починено: `db` и `backend` контейнеры на VPS отвалились от
+сети `ai_shared` (см. `03_TDD.md`, раздел «Инфраструктура и сеть», «Известная
+нестабильность») — переподключены вручную.
+
+`2026-08-31` — шаг **E10-02** (портрет кандидата + ссылка на
+вакансию → `VacancyProfile`, CLI `create-from-portrait`) выполнен, эпик **E10** полностью
+завершён. Детали — журнал `step-E10-02-vacancy-profile-from-portrait.md`.
+
+`2026-08-31` — шаг **E10-01** (полный прогон вакансии по всем
+кандидатам курса, CLI) выполнен: код готов, полный сьют зелёный; реальный прогон на
+проде ещё не запускался — ждёт `GRANT SELECT` на `testchecks_question` и подтверждения
+`course_id`/порога владельцем. Детали — журнал `step-E10-01-full-course-screening.md`.
+
+`2026-08-31` — шаг **E9-04** (стилизация AI-карточки под
 визуал ai-screening-hub) выполнен по прямому запросу владельца, поверх уже
 завершённого roadmap E0–E9. Детали — журнал `step-E9-04-styled-candidate-card.md`.
 
@@ -80,8 +106,11 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Текущий следующий шаг
 
-Весь roadmap E0–E9 завершён. Открытых шагов нет — дальнейшая работа по явному
-запросу владельца (новые фичи/правки поверх готового плана).
+Roadmap E0–E9 завершён. Эпик **E10** (ручной прогон вакансии + сборка портрета из
+ссылки, CLI без UI) **полностью завершён** (E10-01, E10-02). E10-01 — реальный прогон
+на проде ещё не запускался (ждёт GRANT+подтверждения владельца, см. журнал
+`step-E10-01-full-course-screening.md`). Следующего согласованного шага нет — ждать
+новую задачу от владельца.
 
 **Не начинать без явного «начинай»/«приступай» от владельца** — план и код разделены
 явным согласованием (правило проекта).
@@ -119,9 +148,49 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E9-02 | Оригинал резюме + видеовизитка (`step-E9-02-resume-video-bundle.md`) | DONE | 2026-08-28 |
 | E9-03 | Export-эндпоинт (`step-E9-03-export-endpoint.md`) | DONE | 2026-08-31 |
 | E9-04 | Стилизация AI-карточки (`step-E9-04-styled-candidate-card.md`) | DONE | 2026-08-31 |
+| E10-01 | Полный прогон вакансии по всем кандидатам, CLI (`step-E10-01-full-course-screening.md`) | DONE (код) | 2026-08-31 |
+| E10-02 | Портрет + ссылка на вакансию → VacancyProfile, CLI (`step-E10-02-vacancy-profile-from-portrait.md`) | DONE | 2026-08-31 |
+| E11-01 | HTTP-туннель к backend для локального dev (`step-E11-01-backend-http-tunnel.md`) | TODO | — |
+| E11-02 | Пересборка fit-score погранично прошедших кандидатов с реальным резюме (`step-E11-02-reverify-borderline-candidates.md`) | TODO | — |
+| E12-01 | Кириллица в PDF AI-карточки (`step-E12-01-cyrillic-font.md`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-08-31` — шаг `step-E10-02-vacancy-profile-from-portrait.md` выполнен, эпик
+  **E10 полностью завершён**: зависимость `beautifulsoup4`,
+  `build_vacancy_requirements(portrait_text, source_url, *, llm_client)` в новом
+  `services/vacancy_portrait.py` — скачивание+вычистка `source_url` через `httpx`+
+  `BeautifulSoup` (ошибка скачивания не блокирует, продолжает по портрету), один
+  LLM-вызов (`response_format=json_object`), невалидный JSON/не-объект →
+  `InvalidVacancyRequirementsResponse` до создания `VacancyProfile`, `source_url`
+  кладётся в итоговый JSON ключом `source_url` (без миграции схемы — `requirements`
+  уже свободный JSON). Новая подкоманда `vacancy-profile create-from-portrait`
+  (`--course-id`, ровно один из `--portrait-text`/`--portrait-file`, опционально
+  `--source-url`/`--notes`) переиспользует `create_vacancy_profile_version` как есть
+  (уже триггерит `enqueue_fit_recalc_for_course`). Тесты —
+  `tests/services/test_vacancy_portrait.py` (5). Полный сьют `uv run pytest` —
+  183 passed, регрессий нет.
+- `2026-08-31` — шаг `step-E10-01-full-course-screening.md` выполнен: `RESUME_DETECTION_TABLES`
+  (`platform_db.py` = `CANDIDATE_FACTS_TABLES` + `testchecks_question`),
+  `find_anketa_resume_answer_id(platform_base, candidate_id)` в `resume_pipeline.py` —
+  закрывает гэп из E3/E5 («анкетное резюме» = `Answer` с
+  `question.question_text == "ANKETA_RESUME"`, join `testchecks_testattempt` по
+  `candidate_id`, последний по `answered_at`). Новый CLI
+  `src/sfera_ai/cli/run_full_course_screening.py`: обходит все `Application` курса
+  (по образцу `run_fit_scoring_sample.py::_application_ids_for_course`),
+  `resolve_or_create_candidate_profile` → резюме (hh_negotiation_id →
+  `process_resume(hh_resume_id=...)`, иначе `find_anketa_resume_answer_id` →
+  `process_resume(source_answer_id=...)`, ни того ни другого — пропуск без падения) →
+  `build_or_update_candidate_facts` → `run_fit_scoring`; try/except на кандидата (по
+  паттерну `_run_sample`); CSV/stdout-сводка на всех; zip карточек только для
+  `fit_score > --fit-threshold` (default 75) через уже готовый
+  `build_candidates_export_archive` (E9-03/E9-04). Тесты —
+  `tests/services/test_resume_pipeline.py` (+2). Полный сьют `uv run pytest` —
+  178 passed, регрессий нет. Автотеста на сам CLI-скрипт нет — по прецеденту
+  `run_fit_scoring_sample.py`/`run_resume_pipeline.py`. **Реальный прогон на проде НЕ
+  выполнялся** — нужен новый `GRANT SELECT` на `testchecks_question` для `ai_readonly`
+  и подтверждение владельцем `course_id`/порога непосредственно перед запуском (реальные
+  LLM-вызовы, реальные деньги — прецедент E6-04/E6-05).
 - `2026-08-31` — шаг `step-E9-04-styled-candidate-card.md` выполнен: `ai_card.py`
   пересобран на `Table`-блоках reportlab (визуал как в ai-screening-hub — чёрная
   плашка, синий подзаголовок, блок рекомендации с акцентной полосой, два столбца

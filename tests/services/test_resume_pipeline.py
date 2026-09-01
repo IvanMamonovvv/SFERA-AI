@@ -6,7 +6,7 @@ from sfera_ai.db.base import Base
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.providers import LLMResult
-from sfera_ai.services.resume_pipeline import process_resume
+from sfera_ai.services.resume_pipeline import find_anketa_resume_answer_id, process_resume
 
 _PDF_BYTES = b"%PDF-1.4 fake resume bytes"
 
@@ -181,3 +181,57 @@ def test_anketa_file_end_to_end_marks_done(tmp_engine, monkeypatch):
         assert extract.status == "DONE"
         assert s3_client.get_object.call_count == 1
         assert llm_client.complete.call_count == 1
+
+
+def _build_answers_platform(rows: list[tuple[int, int, int, str, str]]):
+    """rows: (answer_id, question_id, attempt_id, question_text, answered_at)."""
+    from sqlalchemy import create_engine
+
+    from sfera_ai.platform_db import reflect_platform_tables
+
+    platform_engine = create_engine("sqlite:///:memory:")
+    with platform_engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE testchecks_question (id INTEGER PRIMARY KEY, question_text TEXT)")
+        conn.exec_driver_sql("CREATE TABLE testchecks_testattempt (id INTEGER PRIMARY KEY, candidate_id INTEGER)")
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, question_id INTEGER, "
+            "attempt_id INTEGER, answered_at TEXT)"
+        )
+        for answer_id, question_id, attempt_id, question_text, answered_at in rows:
+            conn.exec_driver_sql(
+                f"INSERT OR IGNORE INTO testchecks_question (id, question_text) "
+                f"VALUES ({question_id}, '{question_text}')"
+            )
+            conn.exec_driver_sql(
+                f"INSERT OR IGNORE INTO testchecks_testattempt (id, candidate_id) "
+                f"VALUES ({attempt_id}, {attempt_id})"
+            )
+            conn.exec_driver_sql(
+                f"INSERT INTO testchecks_answer (id, question_id, attempt_id, answered_at) "
+                f"VALUES ({answer_id}, {question_id}, {attempt_id}, '{answered_at}')"
+            )
+    return reflect_platform_tables(
+        platform_engine, tables=("testchecks_question", "testchecks_testattempt", "testchecks_answer")
+    )
+
+
+def test_find_anketa_resume_answer_id_returns_latest_matching_answer():
+    platform_base = _build_answers_platform([
+        (1, 10, 100, "ANKETA_RESUME", "2026-01-01T00:00:00"),
+        (2, 10, 100, "ANKETA_RESUME", "2026-02-01T00:00:00"),
+        (3, 20, 100, "OTHER_QUESTION", "2026-03-01T00:00:00"),
+    ])
+
+    result = find_anketa_resume_answer_id(platform_base, candidate_id=100)
+
+    assert result == 2
+
+
+def test_find_anketa_resume_answer_id_returns_none_when_no_file():
+    platform_base = _build_answers_platform([
+        (1, 20, 100, "OTHER_QUESTION", "2026-01-01T00:00:00"),
+    ])
+
+    result = find_anketa_resume_answer_id(platform_base, candidate_id=100)
+
+    assert result is None
