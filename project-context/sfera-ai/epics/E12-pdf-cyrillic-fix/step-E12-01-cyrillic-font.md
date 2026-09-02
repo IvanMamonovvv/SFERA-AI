@@ -1,6 +1,6 @@
 # Шаг E12-01 — Кириллица в PDF AI-карточки
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (export) · **Зависит от:** E9-01/E9-04 (`ai_card.py` уже существует)
 **Перед началом:** прочитай `src/sfera_ai/services/export/ai_card.py` (текущие стили,
 `_STYLE_*` на `Helvetica`/`Helvetica-Bold`), `step-E9-04-styled-candidate-card.md`.
@@ -59,4 +59,17 @@ uv run pytest tests/services/test_ai_card_export.py -q
 
 ## Журнал
 
-- (пусто)
+- 2026-09-01: На PyPI нет пакета с готовым TTF-шрифтом с кириллицей (проверено —
+  `dejavu-fonts-ttf` не существует), поэтому вендорим шрифт напрямую в репозиторий:
+  `src/sfera_ai/services/export/fonts/DejaVuSans.ttf` + `DejaVuSans-Bold.ttf` (~1.4 МБ
+  суммарно, скачаны с официального релиза DejaVu Fonts 2.37, лицензия — свободная
+  Bitstream Vera-подобная, файл лицензии рядом `DEJAVU-LICENSE`). Зарегистрированы через
+  `pdfmetrics.registerFont`/`registerFontFamily` в `ai_card.py`, все `fontName="Helvetica*"`
+  заменены на `_FONT_REGULAR`/`_FONT_BOLD`. Отдельно найдена и исправлена регрессия —
+  первая колонка таблицы критериев (`_criteria_scores_table`) рендерилась как голая строка
+  без стиля Paragraph, ReportLab брал дефолтный Helvetica для таких ячеек несмотря на смену
+  `_STYLES["Normal"]` — добавлен явный `FONTNAME` на всё тело таблицы. Шрифт лежит внутри
+  `src/`, отдельных правок Dockerfile/pyproject.toml не потребовалось — копируется вместе с
+  кодом (`COPY src ./src`). Визуально проверено (синтетические кириллические данные →
+  PDF → PNG через qlmanage): весь текст читаем. `pytest tests/services/test_ai_card_export.py`
+  — 8 passed.
