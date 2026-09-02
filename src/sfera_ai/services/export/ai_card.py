@@ -1,10 +1,13 @@
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,7 +16,19 @@ from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.resume_extract import ResumeExtract
 
+# step-E12-01 — Helvetica (AFM) не поддерживает кириллицу, весь русский текст в PDF
+# рендерился чёрными прямоугольниками. DejaVu Sans — TTF с кириллицей, вендорим файл
+# в репозиторий (не pip-зависимость), т.к. на PyPI нет пакета с этим шрифтом.
+_FONTS_DIR = Path(__file__).parent / "fonts"
+_FONT_REGULAR = "DejaVuSans"
+_FONT_BOLD = "DejaVuSans-Bold"
+pdfmetrics.registerFont(TTFont(_FONT_REGULAR, str(_FONTS_DIR / "DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont(_FONT_BOLD, str(_FONTS_DIR / "DejaVuSans-Bold.ttf")))
+pdfmetrics.registerFontFamily(_FONT_REGULAR, normal=_FONT_REGULAR, bold=_FONT_BOLD)
+
 _STYLES = getSampleStyleSheet()
+_STYLES["Normal"].fontName = _FONT_REGULAR
+_STYLES["Title"].fontName = _FONT_BOLD
 
 CONFIDENCE_RU = {"LOW": "низкая", "MEDIUM": "средняя", "HIGH": "высокая"}
 
@@ -38,14 +53,14 @@ _PAGE_WIDTH = A4[0] - 4 * cm  # margins 2cm слева/справа (SimpleDocTe
 _STYLE_NORMAL = _STYLES["Normal"]
 _STYLE_BULLET = ParagraphStyle("bullet", parent=_STYLE_NORMAL, leftIndent=0.3 * cm)
 _STYLE_TITLE = ParagraphStyle("card_title", parent=_STYLES["Title"], alignment=0, spaceAfter=2)
-_STYLE_SUBTITLE = ParagraphStyle("card_subtitle", parent=_STYLE_NORMAL, textColor=_COLOR_BLUE, fontName="Helvetica-Bold")
-_STYLE_STRIP = ParagraphStyle("card_strip", parent=_STYLE_NORMAL, textColor=_COLOR_WHITE, fontName="Helvetica-Bold", fontSize=9)
-_STYLE_REC_LABEL = ParagraphStyle("rec_label", parent=_STYLE_NORMAL, textColor=_COLOR_REC_LABEL, fontName="Helvetica-Bold")
-_STYLE_COL_TITLE_STRENGTHS = ParagraphStyle("col_title_strengths", parent=_STYLE_NORMAL, textColor=_COLOR_STRENGTHS, fontName="Helvetica-Bold")
-_STYLE_COL_TITLE_GAPS = ParagraphStyle("col_title_gaps", parent=_STYLE_NORMAL, textColor=_COLOR_GAPS, fontName="Helvetica-Bold")
-_STYLE_PLATFORM_TITLE = ParagraphStyle("platform_title", parent=_STYLE_NORMAL, fontName="Helvetica-Bold")
+_STYLE_SUBTITLE = ParagraphStyle("card_subtitle", parent=_STYLE_NORMAL, textColor=_COLOR_BLUE, fontName=_FONT_BOLD)
+_STYLE_STRIP = ParagraphStyle("card_strip", parent=_STYLE_NORMAL, textColor=_COLOR_WHITE, fontName=_FONT_BOLD, fontSize=9)
+_STYLE_REC_LABEL = ParagraphStyle("rec_label", parent=_STYLE_NORMAL, textColor=_COLOR_REC_LABEL, fontName=_FONT_BOLD)
+_STYLE_COL_TITLE_STRENGTHS = ParagraphStyle("col_title_strengths", parent=_STYLE_NORMAL, textColor=_COLOR_STRENGTHS, fontName=_FONT_BOLD)
+_STYLE_COL_TITLE_GAPS = ParagraphStyle("col_title_gaps", parent=_STYLE_NORMAL, textColor=_COLOR_GAPS, fontName=_FONT_BOLD)
+_STYLE_PLATFORM_TITLE = ParagraphStyle("platform_title", parent=_STYLE_NORMAL, fontName=_FONT_BOLD)
 _STYLE_FOOTER = ParagraphStyle("footer", parent=_STYLE_NORMAL, textColor=_COLOR_FOOTER, fontSize=8, alignment=1)
-_STYLE_TOTAL = ParagraphStyle("total", parent=_STYLE_NORMAL, fontName="Helvetica-Bold")
+_STYLE_TOTAL = ParagraphStyle("total", parent=_STYLE_NORMAL, fontName=_FONT_BOLD)
 
 
 def candidate_display_name(candidate_profile_id: int, full_name: str | None = None) -> str:
@@ -176,7 +191,8 @@ def _criteria_scores_table(criteria_scores: dict[str, Any]) -> Table:
             [
                 ("GRID", (0, 0), (-1, -1), 0.5, _COLOR_GRID),
                 ("BACKGROUND", (0, 0), (-1, 0), _COLOR_HEADER_BG),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, -1), _FONT_REGULAR),
+                ("FONTNAME", (0, 0), (-1, 0), _FONT_BOLD),
                 ("ALIGN", (1, 0), (1, -1), "RIGHT"),
             ]
         )

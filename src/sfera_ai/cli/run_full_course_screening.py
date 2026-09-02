@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.config import Settings
 from sfera_ai.db.session import make_write_engine
 from sfera_ai.integrations.hh_client import HHClient
+from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.platform_db import RESUME_DETECTION_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
@@ -51,12 +52,11 @@ def _process_resume_for_profile(profile, *, platform_base, hh_client, s3_client,
     )
 
 
-def _screen_application(
-    session, application_id: int, *, platform_base, vacancy_profile: VacancyProfile,
-    hh_client, s3_client, s3_bucket: str, llm_client,
+def _screen_profile(
+    session, profile: CandidateProfile, application_id: int | None, *, platform_base,
+    vacancy_profile: VacancyProfile, hh_client, s3_client, s3_bucket: str, llm_client,
 ) -> dict:
     try:
-        profile = resolve_or_create_candidate_profile(session, platform_base=platform_base, application_id=application_id)
         _process_resume_for_profile(
             profile, platform_base=platform_base, hh_client=hh_client,
             s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client, session=session,
@@ -74,7 +74,7 @@ def _screen_application(
         }
     except Exception as exc:
         return {
-            "candidate_profile_id": None,
+            "candidate_profile_id": profile.id,
             "application_id": application_id,
             "data_completeness": None,
             "fit_score": None,
@@ -84,13 +84,63 @@ def _screen_application(
         }
 
 
+def _screen_application(
+    session, application_id: int, *, platform_base, vacancy_profile: VacancyProfile,
+    hh_client, s3_client, s3_bucket: str, llm_client,
+) -> dict:
+    try:
+        profile = resolve_or_create_candidate_profile(session, platform_base=platform_base, application_id=application_id)
+    except Exception as exc:
+        return {
+            "candidate_profile_id": None,
+            "application_id": application_id,
+            "data_completeness": None,
+            "fit_score": None,
+            "confidence": "ERROR",
+            "recommendation": "",
+            "summary": str(exc)[:500],
+        }
+    return _screen_profile(
+        session, profile, application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
+        hh_client=hh_client, s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
+    )
+
+
+def _screen_candidate_profile_id(
+    session, candidate_profile_id: int, *, platform_base, vacancy_profile: VacancyProfile,
+    hh_client, s3_client, s3_bucket: str, llm_client,
+) -> dict:
+    profile = session.get(CandidateProfile, candidate_profile_id)
+    if profile is None:
+        return {
+            "candidate_profile_id": candidate_profile_id,
+            "application_id": None,
+            "data_completeness": None,
+            "fit_score": None,
+            "confidence": "ERROR",
+            "recommendation": "",
+            "summary": f"CandidateProfile id={candidate_profile_id} не найден",
+        }
+    return _screen_profile(
+        session, profile, profile.application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
+        hh_client=hh_client, s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Полный прогон вакансии по всем кандидатам курса (E10-01)")
-    parser.add_argument("--course-id", type=int, required=True)
+    parser.add_argument("--course-id", type=int, required=True, help="используется и как источник вакансии при --candidate-ids")
+    parser.add_argument(
+        "--candidate-ids", type=str, default=None,
+        help="через запятую id CandidateProfile — точечный пересчёт вместо всех заявок курса (E11-02)",
+    )
     parser.add_argument("--fit-threshold", type=int, default=75)
     parser.add_argument("--zip-path", type=str, required=True, help="куда сохранить zip с карточками прошедших порог")
     parser.add_argument("--csv", type=str, default=None, help="путь для CSV-сводки вместо stdout")
     args = parser.parse_args()
+    candidate_profile_ids = (
+        [int(v) for v in args.candidate_ids.split(",") if v.strip()] if args.candidate_ids else None
+    )
 
     settings = Settings()
     write_engine = make_write_engine(settings)
@@ -113,7 +163,7 @@ def main() -> None:
     )
     llm_client = OpenRouterClient(api_key=settings.openrouter_api_key, base_url=settings.openrouter_base_url)
 
-    application_ids = _application_ids_for_course(platform_base, args.course_id)
+    application_ids = None if candidate_profile_ids else _application_ids_for_course(platform_base, args.course_id)
 
     with Session(write_engine) as session:
         vacancy_profile = session.scalar(
@@ -127,14 +177,24 @@ def main() -> None:
 
         rows = []
         passed_ids: list[int] = []
-        for application_id in application_ids:
-            row = _screen_application(
-                session, application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
-                hh_client=hh_client, s3_client=s3_client, s3_bucket=settings.s3_bucket, llm_client=llm_client,
-            )
-            rows.append(row)
-            if row["fit_score"] is not None and row["fit_score"] > args.fit_threshold:
-                passed_ids.append(row["candidate_profile_id"])
+        if candidate_profile_ids:
+            for candidate_profile_id in candidate_profile_ids:
+                row = _screen_candidate_profile_id(
+                    session, candidate_profile_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
+                    hh_client=hh_client, s3_client=s3_client, s3_bucket=settings.s3_bucket, llm_client=llm_client,
+                )
+                rows.append(row)
+                if row["fit_score"] is not None and row["fit_score"] > args.fit_threshold:
+                    passed_ids.append(row["candidate_profile_id"])
+        else:
+            for application_id in application_ids:
+                row = _screen_application(
+                    session, application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
+                    hh_client=hh_client, s3_client=s3_client, s3_bucket=settings.s3_bucket, llm_client=llm_client,
+                )
+                rows.append(row)
+                if row["fit_score"] is not None and row["fit_score"] > args.fit_threshold:
+                    passed_ids.append(row["candidate_profile_id"])
 
         if passed_ids:
             archive_bytes = build_candidates_export_archive(
