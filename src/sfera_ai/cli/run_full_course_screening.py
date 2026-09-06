@@ -10,17 +10,21 @@ from sfera_ai.config import Settings
 from sfera_ai.db.session import make_write_engine
 from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.models.candidate_profile import CandidateProfile
+from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.platform_db import RESUME_DETECTION_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
-from sfera_ai.services.candidate_facts import build_or_update_candidate_facts
+from sfera_ai.services.candidate_facts import build_or_update_candidate_facts, resume_status
 from sfera_ai.services.candidate_identity import resolve_or_create_candidate_profile
 from sfera_ai.services.change_detection import get_candidate_id
 from sfera_ai.services.export.archive import build_candidates_export_archive
 from sfera_ai.services.fit_scoring import run_fit_scoring
 from sfera_ai.services.resume_pipeline import find_anketa_resume_answer_id, process_resume
 
-_FIELDNAMES = ("candidate_profile_id", "application_id", "data_completeness", "fit_score", "confidence", "recommendation", "summary")
+_FIELDNAMES = (
+    "candidate_profile_id", "application_id", "data_completeness", "fit_score",
+    "confidence", "recommendation", "summary", "resume_status",
+)
 
 
 def _application_ids_for_course(platform_base, course_id: int) -> list[int]:
@@ -63,6 +67,9 @@ def _screen_profile(
         )
         profile = build_or_update_candidate_facts(session, platform_base, llm_client, profile)
         analysis = run_fit_scoring(session, candidate_profile=profile, vacancy_profile=vacancy_profile, llm_client=llm_client)
+        resume_extracts = session.scalars(
+            select(ResumeExtract).where(ResumeExtract.candidate_profile_id == profile.id)
+        ).all()
         return {
             "candidate_profile_id": profile.id,
             "application_id": application_id,
@@ -71,6 +78,7 @@ def _screen_profile(
             "confidence": analysis.confidence,
             "recommendation": analysis.recommendation,
             "summary": analysis.summary,
+            "resume_status": resume_status(resume_extracts),
         }
     except Exception as exc:
         return {
@@ -81,6 +89,7 @@ def _screen_profile(
             "confidence": "ERROR",
             "recommendation": "",
             "summary": str(exc)[:500],
+            "resume_status": "UNKNOWN",
         }
 
 
@@ -99,6 +108,7 @@ def _screen_application(
             "confidence": "ERROR",
             "recommendation": "",
             "summary": str(exc)[:500],
+            "resume_status": "UNKNOWN",
         }
     return _screen_profile(
         session, profile, application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
@@ -120,6 +130,7 @@ def _screen_candidate_profile_id(
             "confidence": "ERROR",
             "recommendation": "",
             "summary": f"CandidateProfile id={candidate_profile_id} не найден",
+            "resume_status": "UNKNOWN",
         }
     return _screen_profile(
         session, profile, profile.application_id, platform_base=platform_base, vacancy_profile=vacancy_profile,
@@ -184,7 +195,7 @@ def main() -> None:
                     hh_client=hh_client, s3_client=s3_client, s3_bucket=settings.s3_bucket, llm_client=llm_client,
                 )
                 rows.append(row)
-                if row["fit_score"] is not None and row["fit_score"] > args.fit_threshold:
+                if row["fit_score"] is not None and row["fit_score"] >= args.fit_threshold:
                     passed_ids.append(row["candidate_profile_id"])
         else:
             for application_id in application_ids:
@@ -193,7 +204,7 @@ def main() -> None:
                     hh_client=hh_client, s3_client=s3_client, s3_bucket=settings.s3_bucket, llm_client=llm_client,
                 )
                 rows.append(row)
-                if row["fit_score"] is not None and row["fit_score"] > args.fit_threshold:
+                if row["fit_score"] is not None and row["fit_score"] >= args.fit_threshold:
                     passed_ids.append(row["candidate_profile_id"])
 
         if passed_ids:

@@ -10,7 +10,7 @@ from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.providers import OpenRouterClient
 
-PROMPT_VERSION = "fit-scoring-v1"
+PROMPT_VERSION = "fit-scoring-v2"
 MODEL = "openai/gpt-4o-mini"
 
 _CONFIDENCE_CHOICES = {"LOW", "MEDIUM", "HIGH"}
@@ -24,7 +24,19 @@ _LIST_FIELDS = (
 
 _SYSTEM_PROMPT = (
     "Ты оцениваешь соответствие кандидата вакансии по фактам о кандидате и требованиям "
-    "вакансии. Верни ТОЛЬКО валидный JSON-объект без пояснений и markdown-обёртки со "
+    "вакансии. Каждый факт помечен evidence[0].source_type: HH_RESUME или ANKETA_FILE "
+    "(резюме), ANSWER (ответ на анкету), VIDEO (видеовизитка). Приоритет источников при "
+    "противоречии по одному и тому же параметру: резюме (HH_RESUME/ANKETA_FILE) важнее "
+    "ответов (ANSWER), ответы важнее видео (VIDEO) — при конфликте верь более "
+    "приоритетному источнику. Если в приоритетном источнике значения параметра нет, "
+    "бери его из следующего по приоритету источника без штрафа за это — отсутствие "
+    "значения в резюме не повод занижать оценку, если ответ или видео его подтверждают. "
+    "Менее приоритетные источники не отбрасывай — используй как дополнение там, где "
+    "в резюме этого параметра нет. Нехватка данных сама по себе не повод занижать оценку "
+    "искусственно ниже того, что подтверждают присутствующие факты, и не блокирует "
+    "кандидата — отражай в оценке реальный объём и качество доступных фактов через "
+    "data_completeness и confidence, а не через искусственный потолок fit_score. "
+    "Верни ТОЛЬКО валидный JSON-объект без пояснений и markdown-обёртки со "
     "следующими полями: fit_score (число 0-100 или null), data_completeness (число "
     "0-100), confidence (одно из LOW/MEDIUM/HIGH), recommendation (одно из "
     "STRONG_MATCH/POSSIBLE_MATCH/WEAK_MATCH/NOT_ENOUGH_DATA/NOT_A_MATCH), "

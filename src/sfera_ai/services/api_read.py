@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session as PlatformSession
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
+from sfera_ai.models.resume_extract import ResumeExtract
+from sfera_ai.services.candidate_facts import resume_status
 
 QUEUED_STATUSES = ("PENDING", "PROCESSING")
 
@@ -101,6 +103,10 @@ def get_candidate_detail(session: Session, course_id: int, candidate_profile_id:
     profile = session.get(CandidateProfile, candidate_profile_id)
     facts = profile.facts if profile is not None else []
 
+    resume_extracts = session.scalars(
+        select(ResumeExtract).where(ResumeExtract.candidate_profile_id == candidate_profile_id)
+    ).all()
+
     history = []
     previous: CandidateVacancyAnalysis | None = None
     for version in versions:
@@ -117,6 +123,7 @@ def get_candidate_detail(session: Session, course_id: int, candidate_profile_id:
 
     return {
         "candidate_profile_id": candidate_profile_id,
+        "resume_status": resume_status(resume_extracts),
         "current": {
             "id": current.id,
             "version": current.version,
@@ -227,6 +234,20 @@ def _demo_progress_by_candidate_profile(
     return result
 
 
+def _resume_status_by_candidate_profile(session: Session, candidate_profile_ids: list[int]) -> dict[int, str]:
+    """Батч-загрузка `ResumeExtract` по всем кандидатам страницы одним запросом
+    (E13-02) — без N+1 на кандидата, аналогично `_demo_progress_by_candidate_profile`."""
+    if not candidate_profile_ids:
+        return {}
+    extracts = session.scalars(
+        select(ResumeExtract).where(ResumeExtract.candidate_profile_id.in_(candidate_profile_ids))
+    ).all()
+    extracts_by_profile: dict[int, list[ResumeExtract]] = {profile_id: [] for profile_id in candidate_profile_ids}
+    for extract in extracts:
+        extracts_by_profile[extract.candidate_profile_id].append(extract)
+    return {profile_id: resume_status(profile_extracts) for profile_id, profile_extracts in extracts_by_profile.items()}
+
+
 def list_candidates(session: Session, platform_base, course_id: int, *, limit: int, offset: int) -> dict[str, Any]:
     """03_TDD.md, «3. API / контракты» — список кандидатов курса по текущей версии
     CandidateVacancyAnalysis, с fit_delta (текущий vs предыдущая версия) и demo_progress."""
@@ -250,9 +271,9 @@ def list_candidates(session: Session, platform_base, course_id: int, *, limit: i
         .all()
     )
 
-    demo_progress_map = _demo_progress_by_candidate_profile(
-        session, platform_base, course_id, [row.candidate_profile_id for row in rows]
-    )
+    candidate_profile_ids = [row.candidate_profile_id for row in rows]
+    demo_progress_map = _demo_progress_by_candidate_profile(session, platform_base, course_id, candidate_profile_ids)
+    resume_status_map = _resume_status_by_candidate_profile(session, candidate_profile_ids)
 
     items = []
     for analysis in rows:
@@ -277,6 +298,7 @@ def list_candidates(session: Session, platform_base, course_id: int, *, limit: i
                 "recommendation": analysis.recommendation,
                 "fit_delta": fit_delta,
                 "demo_progress": demo_progress_map.get(analysis.candidate_profile_id),
+                "resume_status": resume_status_map.get(analysis.candidate_profile_id, "MISSING"),
             }
         )
     return {"items": items, "total": total, "limit": limit, "offset": offset}

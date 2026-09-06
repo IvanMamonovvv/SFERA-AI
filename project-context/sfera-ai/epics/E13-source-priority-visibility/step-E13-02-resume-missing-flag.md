@@ -1,6 +1,6 @@
 # Шаг E13-02 — Видимый флаг «нет резюме» для менеджера
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (services/CLI/API) · **Зависит от:** E13-01 (тот же контекст
 приоритета источников), E9-04 (`ai_card.py` текущая вёрстка), E8-02/E8-03
 (`api_read.py`), E10-01 (`run_full_course_screening.py`)
@@ -92,4 +92,13 @@ uv run pytest -q
 
 ## Журнал
 
-- (пусто)
+- 2026-09-02: Реализовано. `resume_status(resume_extracts)` в `candidate_facts.py`
+  (MISSING/FAILED/OK) переиспользуется в 4 точках: CLI CSV (новая колонка
+  `resume_status`, все 4 dict-литерала синхронизированы), PDF-карточка
+  (`_resume_status_block`, акцентный блок после `_platform_block`, виден только
+  при не-OK), `get_candidate_detail` (`resume_status` на верхнем уровне),
+  `list_candidates` (батч-запрос `_resume_status_by_candidate_profile`, без N+1).
+  Добавлены unit-тесты на `resume_status` (3 состояния), PDF-рендер с/без блока,
+  API-тест на `MISSING`. `uv run pytest` — 188 passed. Ручная проверка CLI/PDF на
+  реальных данных не выполнена (нет доступа к живой платформенной БД/S3/HH в
+  этой сессии) — рекомендую прогнать вручную перед мёрджем.
