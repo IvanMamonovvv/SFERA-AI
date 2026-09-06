@@ -111,6 +111,7 @@ def test_candidate_detail_returns_current_facts_and_compressed_history():
     assert response.status_code == 200
     body = response.json()
     assert body["candidate_profile_id"] == profile_id
+    assert body["resume_status"] == "MISSING"
     assert body["current"]["fit_score"] == 87
     assert body["current"]["recommendation"] == "STRONG_MATCH"
     assert body["current"]["summary"] == "Хороший кандидат"

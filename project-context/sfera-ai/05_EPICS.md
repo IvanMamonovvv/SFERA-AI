@@ -235,10 +235,10 @@
 итоговая оценка естественно мягче/осторожнее при малом объёме данных. Решение
 зафиксировано в памяти — [[project_source_priority_resume_answers_video]].
 
-- [ ] `epics/E13-source-priority-visibility/step-E13-01-resume-priority-prompt.md` —
+- [x] `epics/E13-source-priority-visibility/step-E13-01-resume-priority-prompt.md` —
   приоритет резюме > ответы > видео при конфликте фактов, явная инструкция в
   промпте fit-scoring, версия промпта инкрементирована.
-- [ ] `epics/E13-source-priority-visibility/step-E13-02-resume-missing-flag.md` —
+- [x] `epics/E13-source-priority-visibility/step-E13-02-resume-missing-flag.md` —
   видимый флаг «резюме отсутствует/битое» в CSV-сводке CLI, PDF-карточке, API
   summary/candidates — не блокирует скоринг, только объясняет менеджеру причину
   меньшей уверенности.

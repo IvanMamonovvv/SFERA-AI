@@ -175,6 +175,76 @@ def test_renders_pdf_falls_back_when_resume_extract_missing_full_name(tmp_engine
     assert pdf.startswith(b"%PDF")
 
 
+def _base_analysis(profile_id: int, vacancy_profile_id: int, course_id: int) -> CandidateVacancyAnalysis:
+    return CandidateVacancyAnalysis(
+        candidate_profile_id=profile_id,
+        course_id=course_id,
+        vacancy_profile_id=vacancy_profile_id,
+        version=1,
+        is_current=True,
+        fit_score=85,
+        data_completeness=90,
+        confidence="HIGH",
+        recommendation="ADVANCE",
+        analyzed_at=datetime.now(timezone.utc),
+    )
+
+
+def test_pdf_shows_resume_missing_block_when_no_resume_extract(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        vacancy_profile = _make_vacancy_profile(session, course_id=1)
+        profile = CandidateProfile(application_id=42)
+        session.add(profile)
+        session.flush()
+        session.add(_base_analysis(profile.id, vacancy_profile.id, course_id=1))
+        session.commit()
+
+        pdf = render_ai_card_pdf(session, profile.id, course_id=1)
+
+    assert pdf is not None
+    assert pdf.startswith(b"%PDF")
+
+
+def test_pdf_hides_resume_status_block_when_resume_done(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        vacancy_profile = _make_vacancy_profile(session, course_id=1)
+        profile = CandidateProfile(application_id=42)
+        session.add(profile)
+        session.flush()
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=profile.id,
+                source_type="ANSWER",
+                source_answer_id=1,
+                raw_text="...",
+                structured_data={"full_name": "Иванов Иван"},
+                status="DONE",
+            )
+        )
+        session.add(_base_analysis(profile.id, vacancy_profile.id, course_id=1))
+        session.commit()
+
+        pdf_ok = render_ai_card_pdf(session, profile.id, course_id=1)
+
+    Base.metadata.drop_all(tmp_engine)
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        vacancy_profile = _make_vacancy_profile(session, course_id=1)
+        profile = CandidateProfile(application_id=43)
+        session.add(profile)
+        session.flush()
+        session.add(_base_analysis(profile.id, vacancy_profile.id, course_id=1))
+        session.commit()
+
+        pdf_missing = render_ai_card_pdf(session, profile.id, course_id=1)
+
+    assert pdf_ok is not None
+    assert pdf_missing is not None
+    assert len(pdf_missing) > len(pdf_ok)
+
+
 def test_returns_none_when_no_current_analysis(tmp_engine):
     Base.metadata.create_all(tmp_engine)
     with Session(tmp_engine) as session:

@@ -9,7 +9,7 @@ from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.platform_db import CANDIDATE_FACTS_TABLES, reflect_platform_tables
 from sfera_ai.providers import LLMResult
-from sfera_ai.services.candidate_facts import build_or_update_candidate_facts
+from sfera_ai.services.candidate_facts import build_or_update_candidate_facts, resume_status
 
 
 def _platform_base(*, application=(7, 100, 5, "2026-08-20T10:00:00"), answers=(), transcription_jobs=()):
@@ -220,3 +220,55 @@ def test_llm_provider_error_leaves_answers_unadded(tmp_engine):
 
         assert result.facts == []
         assert result.data_completeness == "MINIMAL"
+
+
+def test_resume_facts_picked_up_on_retry_even_when_platform_snapshot_unchanged(tmp_engine):
+    """Регрессия: резюме упало (DNS/сетевой сбой), факты собраны без него, снапшот
+    сохранён. Позже резюме успешно доретраено (ResumeExtract.status стал DONE), но
+    платформенные данные (hh_resume_id и т.д.) не менялись — снапшот совпадает. Без
+    фикса `build_or_update_candidate_facts` возвращал бы профиль без изменений
+    навсегда, резюме реального кандидата так и не попадало бы в facts."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(answers=[(1, 1, "первый ответ")])
+    llm_client = _llm_client('{"facts": [{"key": "fact_a", "value": "A", "answer_id": 1}]}')
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=7)
+        session.add(profile)
+        session.commit()
+
+        first = build_or_update_candidate_facts(session, platform_base, llm_client, profile)
+        assert not any(f["key"] == "experience_years" for f in first.facts)
+
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="DONE", structured_data={"experience_years": 13},
+        )
+        session.add(extract)
+        session.commit()
+
+        second = build_or_update_candidate_facts(session, platform_base, llm_client, profile)
+
+        assert {"key": "experience_years", "value": 13, "confidence": "MEDIUM",
+                "evidence": [{"source_type": "HH_RESUME", "source_id": extract.id}]} in second.facts
+        assert llm_client.complete.call_count == 1  # LLM повторно не звали — новых ответов не было
+
+
+def test_resume_status_missing_when_no_extracts():
+    assert resume_status([]) == "MISSING"
+
+
+def test_resume_status_ok_when_any_extract_done():
+    extracts = [
+        ResumeExtract(candidate_profile_id=1, source_type="ANKETA_FILE", source_answer_id=1, status="FAILED"),
+        ResumeExtract(candidate_profile_id=1, source_type="HH_RESUME", hh_resume_id="r1", status="DONE"),
+    ]
+    assert resume_status(extracts) == "OK"
+
+
+def test_resume_status_failed_when_no_extract_done():
+    extracts = [
+        ResumeExtract(candidate_profile_id=1, source_type="HH_RESUME", hh_resume_id="r1", status="FAILED"),
+        ResumeExtract(candidate_profile_id=1, source_type="ANKETA_FILE", source_answer_id=1, status="PENDING"),
+    ]
+    assert resume_status(extracts) == "FAILED"

@@ -112,6 +112,17 @@ def _completeness(*, has_hh_resume: bool, has_anketa_resume: bool, has_answers: 
     return "FULL"
 
 
+def resume_status(resume_extracts: list[ResumeExtract]) -> str:
+    """Шаг E13-02 — видимый статус резюме кандидата: MISSING (нет ни одной записи),
+    FAILED (есть записи, но ни одна не DONE), OK (хотя бы одна DONE). Не блокирует
+    скоринг (E13-01) — только сигнализирует менеджеру причину низкого confidence."""
+    if not resume_extracts:
+        return "MISSING"
+    if any(extract.status == "DONE" for extract in resume_extracts):
+        return "OK"
+    return "FAILED"
+
+
 def _dedupe_key(fact: dict[str, Any]) -> tuple:
     evidence = fact.get("evidence") or [{}]
     return (fact.get("key"), evidence[0].get("source_type"), evidence[0].get("source_id"))
@@ -126,8 +137,6 @@ def build_or_update_candidate_facts(
     инкрементально дополняет `facts` дельтой из ответов/резюме/видео, не переписывая
     уже сохранённые факты, пересчитывает `data_completeness`, инкрементирует `version`."""
     current_snapshot = compute_current_sources_snapshot(platform_base, profile)
-    if current_snapshot == profile.sources_snapshot:
-        return profile
 
     existing_keys = {_dedupe_key(fact) for fact in profile.facts}
 
@@ -143,6 +152,14 @@ def build_or_update_candidate_facts(
             if _dedupe_key(fact) not in existing_keys:
                 new_facts.append(fact)
                 existing_keys.add(_dedupe_key(fact))
+
+    if current_snapshot == profile.sources_snapshot and not new_facts:
+        # Снапшот считается по данным платформы (change_detection.py) — не знает про
+        # состояние нашего ResumeExtract. Резюме может стать DONE позже отдельным
+        # ретраем (после сетевого сбоя), не меняя платформенный снапшот — без этой
+        # проверки такие факты никогда не попадут в profile.facts (баг нашёл владелец
+        # на реальном кандидате: резюме DONE неделю, факты из него не подтягивались).
+        return profile
 
     candidate_id = get_candidate_id(platform_base, profile)
     candidate_answer_ids: list[int] = []

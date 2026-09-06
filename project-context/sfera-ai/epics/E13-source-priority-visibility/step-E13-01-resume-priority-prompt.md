@@ -1,6 +1,6 @@
 # Шаг E13-01 — Приоритет резюме в промпте fit-scoring
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (fit-scoring) · **Зависит от:** E6-01 (`candidate_facts.py`,
 факты уже несут `evidence[0].source_type`), E6-03 (`fit_scoring.py`)
 **Перед началом:** прочитай `src/sfera_ai/services/fit_scoring.py` (`_SYSTEM_PROMPT`,
@@ -53,13 +53,13 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] `_SYSTEM_PROMPT` содержит явную инструкцию приоритета резюме > ответы > видео
+- [x] `_SYSTEM_PROMPT` содержит явную инструкцию приоритета резюме > ответы > видео
       при конфликте значений одного параметра
-- [ ] `_SYSTEM_PROMPT` явно говорит: нехватка данных не блокирует кандидата, оценка
+- [x] `_SYSTEM_PROMPT` явно говорит: нехватка данных не блокирует кандидата, оценка
       отражает объём доступных фактов
-- [ ] `PROMPT_VERSION` инкрементирован (была `fit-scoring-v1`)
-- [ ] `uv run pytest tests/services/test_fit_scoring.py` зелёный, регрессий нет
-- [ ] Ручная проверка на тех же 6 кандидатах E11-02 — вердикты объяснимы новым
+- [x] `PROMPT_VERSION` инкрементирован (была `fit-scoring-v1`, стала `fit-scoring-v2`)
+- [x] `uv run pytest tests/services/test_fit_scoring.py` зелёный, регрессий нет
+- [x] Ручная проверка на тех же 6 кандидатах E11-02 — вердикты объяснимы новым
       приоритетом, не случайный шум
 
 ## Как проверить
@@ -76,4 +76,32 @@ uv run pytest tests/services/test_fit_scoring.py -q
 
 ## Журнал
 
-- (пусто)
+- `2026-09-02`: `_SYSTEM_PROMPT` дополнен инструкцией приоритета источников
+  (резюме HH_RESUME/ANKETA_FILE > ANSWER > VIDEO при конфликте значения одного
+  параметра; отсутствие значения в приоритетном источнике — брать из
+  следующего без штрафа; нехватка данных не блокирует кандидата, отражается
+  через `data_completeness`/`confidence`, не искусственным потолком
+  `fit_score`). `PROMPT_VERSION` → `fit-scoring-v2`. Тесты
+  `tests/services/test_fit_scoring.py` зелёные (6 passed), без правок тестов.
+
+  Ручной прогон (владелец подтвердил) через `tunnel-platform-db.sh` +
+  `tunnel-backend.sh`, `run_full_course_screening.py --course-id 39
+  --candidate-ids 2301,2677,2760,3112,2378,3026` (тот же CLI-флаг из E11-02).
+  Сравнение с версией «стало» из E11-02 (с резюме, старый промпт v1):
+
+  | candidate_profile_id | было (E11-02, v1+резюме) | стало (v2) |
+  |---|---|---|
+  | 2301 | 70 POSSIBLE_MATCH | 75 POSSIBLE_MATCH |
+  | 2677 | 75 POSSIBLE_MATCH | 75 POSSIBLE_MATCH |
+  | 2760 | 65 POSSIBLE_MATCH | 75 POSSIBLE_MATCH |
+  | 3112 | 65 POSSIBLE_MATCH | 75 POSSIBLE_MATCH |
+  | 2378 | `NULL` (аномалия) POSSIBLE_MATCH | 70 POSSIBLE_MATCH |
+  | 3026 | 75 POSSIBLE_MATCH | 70 POSSIBLE_MATCH |
+
+  Все 6 остались `POSSIBLE_MATCH`, ни один вердикт не скакнул случайно.
+  Побочно: известная аномалия `fit_score=NULL` у 2378 (зафиксирована в
+  журнале E11-02, не расследовалась) в этом прогоне не повторилась —
+  вернулся числовой `fit_score=70`; похоже на нестабильность LLM-ответа
+  на прошлом прогоне, не системный баг промпта v1/v2 (не расследовалось
+  глубже — не в scope этого шага). Тунели остановлены штатно после
+  прогона, `jobs -l` пуст, порты 5433/8001 закрыты.

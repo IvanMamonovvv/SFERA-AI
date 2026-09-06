@@ -220,6 +220,7 @@ def test_candidates_list_returns_contract_fields_with_fit_delta_and_demo_progres
             "recommendation": "STRONG_MATCH",
             "fit_delta": 45,
             "demo_progress": 75,
+            "resume_status": "MISSING",
         }
     ]
 
