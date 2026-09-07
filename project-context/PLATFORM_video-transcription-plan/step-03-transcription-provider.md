@@ -1,6 +1,6 @@
 # Step 03 — TranscriptionProvider (whisper) + env-переключатель
 
-**Статус:** ⬜ TODO
+**Статус:** 🟡 Код готов, живой прогон — на step-09
 **Зависит от:** step-00 (выбор модели).
 **Цель:** абстракция «видео → текст» с реализацией self-hosted faster-whisper и возможностью переключить на cloud одной env.
 
@@ -59,9 +59,26 @@ TRANSCRIBE_PROVIDER = env('TRANSCRIBE_PROVIDER', default='local')  # local | yan
 ## Критерий готовности
 
 - [ ] `local` провайдер транскрибирует тестовое русское видео в текст.
-- [ ] Пустое/тихое видео → `is_empty=True`, без исключений.
-- [ ] Переключение `TRANSCRIBE_PROVIDER` меняет бэкенд без правок воркера.
-- [ ] Временные файлы удаляются после обработки (нет утечки диска).
+      (Код готов, faster-whisper не установлен локально — реальный прогон
+      перенесён на step-09-tests-smoke.md.)
+- [x] Пустое/тихое видео → `is_empty=True`, без исключений (ffmpeg-ошибка,
+      0-байтовый wav и пустой текст — все три ветки обработаны в
+      `transcribe_video`, без реального видео проверено только по коду).
+- [x] Переключение `TRANSCRIBE_PROVIDER` меняет бэкенд без правок воркера
+      (`get_transcription_provider()` — фабрика по env; `yandex`/`proxy` пока
+      `NotImplementedError`, не в объёме этого шага — решение владельца).
+- [x] Временные файлы удаляются после обработки (`finally: os.remove`,
+      нет утечки диска — по коду, реальный прогон не делался).
 
 ## Журнал
-- (пусто)
+- `2026-09-07` — реализован `sfera_backend/testchecks/services/transcription/base.py`:
+  `TranscriptionResult`, `TranscriptionProvider` Protocol, `LocalFasterWhisperProvider`
+  (модель-синглтон на класс, `language=ru`, `WHISPER_MODEL_SIZE` из env, default `small`
+  — решение step-00), `extract_audio_wav` (ffmpeg-паттерн из
+  `lessons/services/video_processing.py`), `transcribe_video` (оркестрация:
+  извлечение аудио во временный wav → провайдер → удаление wav в `finally`) и
+  `get_transcription_provider()` — фабрика по `TRANSCRIBE_PROVIDER` (default `local`;
+  `yandex`/`proxy` — `NotImplementedError`, вне объёма этого шага). Добавлена
+  зависимость `faster-whisper==1.1.1` в `requirements.txt`. `ruff check` чисто.
+  Пакет не установлен в `.venv` (тяжёлая установка с torch) — живой прогон на
+  тестовом видео перенесён на step-09-tests-smoke.md.
