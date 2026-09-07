@@ -4,7 +4,17 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-07` — шаг **E14-04** (воркер `run_transcription_worker`,
+**Последнее обновление:** `2026-09-07` — шаг **E14-05** (транскрипт/summary
+в API карточки кандидата, код в `sfera_backend`) реализован по явному разрешению владельца.
+Поле `transcription` (`status`/`summary`/`transcript`/`isEmpty`, без `verdict`) добавлено в
+`CandidateCourseAnswersSerializer` → эндпоинт `GET
+/api/v1/courses/{course_uuid}/candidates/{candidate_id}/answers/`. RBAC не менялся — весь
+эндпоинт уже HR/Admin-only. `select_related('transcription_job')` добавлен, чтобы не плодить
+N+1. Новые тесты (3), полный прогон `testchecks`+`courses` — 221/221 зелёных, `manage.py
+spectacular` без новых ошибок. Не закоммичено. Детали — журнал ниже и
+`step-E14-05-api-expose.md`.
+
+`2026-09-07` — шаг **E14-04** (воркер `run_transcription_worker`,
 код в `sfera_backend`) реализован по явному разрешению владельца. По решению владельца
 локальная проверка начата сразу, не отложена до step-09/10: `.venv` был битым (репозиторий
 переносили на диске) — пересоздан с нуля, `pip install -r requirements.txt` прошёл
@@ -266,10 +276,37 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-02 | TranscriptionProvider (whisper) (`step-E14-02-transcription-provider.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
 | E14-03 | SummaryProvider (LLM-пересказ через `ProxyLLMProvider`) (`step-E14-03-summary-provider.md`) | DONE (код, не проверено запуском) | 2026-09-07 |
 | E14-04 | Воркер `run_transcription_worker` (`step-E14-04-worker-command.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
-| E14-05…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-05 | Отдать транскрипт/summary в API карточки кандидата (`step-E14-05-api-expose.md`) | DONE | 2026-09-07 |
+| E14-06…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-09-07` — шаг **E14-05** (транскрипт/summary в API карточки кандидата,
+  `sfera_backend`) реализован по явному разрешению владельца на этот конкретный шаг.
+  Эндпоинт `GET /api/v1/courses/{course_uuid}/candidates/{candidate_id}/answers/`
+  (view `CandidateCourseAnswersListView`, `testchecks/views.py`) уже существовал (не
+  новый — план ошибочно предполагал, что сериализатора ещё нет; на деле карточка HR
+  берёт ответы отсюда, не из `CourseCandidateDetailSerializer`). `testchecks/serializers.py`:
+  новый `TranscriptionJobSerializer` (`status`/`summary`/`transcript`/`isEmpty`, без
+  `verdict` — упрощено владельцем ранее), поле `transcription` (`SerializerMethodField`,
+  `null` без джобы) добавлено в `CandidateCourseAnswersSerializer`. `views.py`:
+  `select_related('transcription_job')` в `answers_queryset`, чтобы поле не создавало
+  N+1 на каждый видео-ответ. RBAC отдельно не трогал — весь эндпоинт уже закрыт
+  `CandidateAnswersManagementPermission` (только super-admin/company-admin/company-user,
+  кандидат — 403). Тесты — новый файл
+  `testchecks/tests/test_candidate_course_answers_transcription.py` (3: DONE-джоба
+  возвращает поле без `verdict`, без джобы — `null`, кандидат — 403). Полный прогон
+  `manage.py test testchecks courses` — 221/221 зелёных (не только новый файл — вся
+  область, чтобы поймать регрессии от изменения `select_related`). `manage.py
+  spectacular` — новых ошибок нет, `TranscriptionJob`-компонент в схеме появился (одна
+  pre-existing ошибка в `companies/views.py`, к этой правке не относится). BFF (Next) не
+  трогал — поле проходит как есть через уже существующий прокси карточки кандидата, без
+  нового CORS. `03_API.md` в репозитории `sfera_backend` не нашёл — такого файла там
+  нет, пункт DoD пропущен. `01_STATE.md` внешнего плана (`FullSphera/project-context/`)
+  не трогал — эта директория вне `sfera_backend` (отдельная область, не входила в
+  выданное разрешение на правку кода). Изменения НЕ закоммичены в `sfera_backend`
+  (только рабочая копия). Детали — журнал `step-E14-05-api-expose.md` и внешний
+  `PLATFORM_video-transcription-plan/step-06-api-expose.md`.
 - `2026-09-07` — шаг **E14-04** (воркер `run_transcription_worker`, `sfera_backend`)
   реализован по явному разрешению владельца на этот конкретный шаг. Новый пакет
   `testchecks/management/commands/run_transcription_worker.py` (+`__init__.py` для
