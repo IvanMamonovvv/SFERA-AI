@@ -4,7 +4,18 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-07` — шаг **E14-03** (`SummaryProvider`, LLM-пересказ
+**Последнее обновление:** `2026-09-07` — шаг **E14-04** (воркер `run_transcription_worker`,
+код в `sfera_backend`) реализован по явному разрешению владельца. По решению владельца
+локальная проверка начата сразу, не отложена до step-09/10: `.venv` был битым (репозиторий
+переносили на диске) — пересоздан с нуля, `pip install -r requirements.txt` прошёл
+(faster-whisper тянет `ctranslate2`, не `torch`), `.env` не понадобился (все переменные в
+`settings.py` с дефолтами → sqlite/локальный диск). `manage.py test testchecks` — 25 passed
+(первый реальный прогон E14-02/E14-03), полный сьют `manage.py test` — **637 passed, 3
+skipped, регрессий нет**. Живого видео/реального LLM-вызова ещё не было — юнит-тесты на
+моках; тестов на сам воркер (E14-04) пока нет (объём E14-08). Не закоммичено. Детали —
+журнал ниже и `step-E14-04-worker-command.md`.
+
+`2026-09-07` — шаг **E14-03** (`SummaryProvider`, LLM-пересказ
 через `ProxyLLMProvider`/`gpt-4o-mini`, код в `sfera_backend`) реализован по явному
 разрешению владельца. Не проверено запуском (нет локального venv/Docker в этой сессии,
 только `py_compile`) — владельцу нужно прогнать `pytest testchecks/tests/test_summary_provider.py`
@@ -254,10 +265,57 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-01 | Постановка `TranscriptionJob` в очередь при загрузке видеовизитки (`step-E14-01-enqueue-on-completion.md`) | DONE | 2026-09-07 |
 | E14-02 | TranscriptionProvider (whisper) (`step-E14-02-transcription-provider.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
 | E14-03 | SummaryProvider (LLM-пересказ через `ProxyLLMProvider`) (`step-E14-03-summary-provider.md`) | DONE (код, не проверено запуском) | 2026-09-07 |
-| E14-04…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-04 | Воркер `run_transcription_worker` (`step-E14-04-worker-command.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
+| E14-05…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-09-07` — шаг **E14-04** (воркер `run_transcription_worker`, `sfera_backend`)
+  реализован по явному разрешению владельца на этот конкретный шаг. Новый пакет
+  `testchecks/management/commands/run_transcription_worker.py` (+`__init__.py` для
+  `management`/`management/commands` — пакетов не было в `testchecks`). Ядро —
+  `claim_batch` (`select_for_update(skip_locked=True)`, PENDING→PROCESSING пачкой до
+  `TRANSCRIBE_CONCURRENCY`, по образцу `SELECT...SKIP LOCKED` из внешнего плана),
+  `reap_stale_jobs` (PROCESSING с `locked_at` старше `TRANSCRIBE_JOB_TIMEOUT_MINUTES`
+  → PENDING/FAILED по `attempts`, тот же `skip_locked` по одному джобу в короткой
+  транзакции — защита от двойного реапа), `_process_job` (скачивание `answer.file` во
+  временный файл тем же паттерном, что `lessons/services/video_processing.py::
+  _download_to_local_path` — S3 напрямую однопоточно/локальный диск через storage API
+  — → `transcribe_video` (E14-02) → `summarize_transcript` (E14-03) → `DONE`;
+  исключение → `attempts+=1`, `PENDING` пока `attempts < TRANSCRIBE_MAX_ATTEMPTS`,
+  иначе `FAILED`). Параллелизм — `ThreadPoolExecutor(max_workers=TRANSCRIBE_CONCURRENCY)`,
+  `close_old_connections()` в начале каждой задачи. Env:
+  `TRANSCRIBE_CONCURRENCY=1`, `TRANSCRIBE_MAX_ATTEMPTS=3`,
+  `TRANSCRIBE_JOB_TIMEOUT_MINUTES=30` (плейсхолдер до замера p99 на step-00/09),
+  `TRANSCRIBE_POLL_INTERVAL_SECONDS=5`. Контекст для `summarize_transcript`
+  (`position` и т.п.) не прокинут — не было в DoD этого шага. Верификация запуском
+  НЕ сделана (нет venv/зависимостей — faster-whisper, Django — в этой сессии), только
+  `ast.parse`. Нужен ручной прогон `manage.py test` и живого видео владельцем/на
+  step-09. Деплой (docker-compose сервис, реплики контейнера) — вне объёма этого
+  шага. Изменения НЕ закоммичены в `sfera_backend` (только рабочая копия). Детали —
+  журнал `step-E14-04-worker-command.md` и внешний
+  `PLATFORM_video-transcription-plan/step-05-worker-command.md`.
+- `2026-09-07` (обновление, тот же день) — владелец попросил начать локальную
+  проверку раньше step-09/10, не откладывать. `.venv` в `sfera_backend` оказался
+  битым: `pip`/интерпретатор ссылались на путь `projects/sfera_backend/...` без
+  `FullSphera` (репозиторий переносили на диске после создания venv). По прямому
+  разрешению владельца venv пересоздан с нуля (`python3.12 -m venv .venv`, старый
+  сохранён рядом как `.venv.broken-old`, не удалён — обратимое действие вместо
+  `rm -rf`). `pip install -r requirements.txt` прошёл: faster-whisper тянет
+  `ctranslate2`, а не `torch` (легче по весу, чем предполагалось изначально в
+  плане). `.env` не понадобился — все переменные в `sfera_backend/settings.py`
+  имеют дефолты (`DB_POSTGRES_ON=False` → sqlite, `USE_S3_STORAGE=False` →
+  локальный диск), реальные секреты не нужны для юнит-тестов. Прогон:
+  `python manage.py test testchecks` — 25 passed (первый реальный запуск тестов
+  E14-02/E14-03, до этого проверялись только `ast.parse`/`py_compile`); полный
+  сьют `python manage.py test` — **637 passed, 3 skipped, регрессий от нового
+  `testchecks/management/`-пакета нет**. Живого видео и реального LLM-вызова
+  (summary) в этом прогоне НЕ было — только юнит-тесты на моках/фикстурах; живая
+  проверка транскрибации+summary остаётся на step-09 внешнего плана (нужны
+  `PROXY_API_KEY`, `TRANSCRIBE_ENABLED=true`, реальный видеофайл). Тестов на сам
+  `run_transcription_worker.py` (E14-04, claim_batch/reap_stale_jobs/retry) пока
+  нет — это объём **E14-08** (тесты и smoke), не откладывался специально, просто
+  ещё не начат.
 - `2026-09-07` — шаг **E14-03** (`SummaryProvider`, `sfera_backend`) реализован по
   явному разрешению владельца на этот конкретный шаг. Новый модуль
   `testchecks/services/transcription/summary.py`: `SummaryResult` (NamedTuple),
