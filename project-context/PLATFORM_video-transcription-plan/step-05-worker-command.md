@@ -1,6 +1,6 @@
 # Step 05 — Воркер `run_transcription_worker` (очередь, concurrency, retry)
 
-**Статус:** ⬜ TODO
+**Статус:** 🟡 Код готов, живой прогон — на step-09 (внешний план)
 **Зависит от:** step-01, 03, 04.
 **Цель:** отдельный процесс, который дренирует очередь `TranscriptionJob`, безопасно параллелится и переживает пики/завалы.
 
@@ -89,4 +89,39 @@ loop:
 - [ ] Веб-latency стабильна при полной очереди (замер).
 
 ## Журнал
-- (пусто)
+- `2026-09-07` — реализовано в `sfera_backend` (владелец дал явное разрешение на правку
+  репо для E14-04). Файл: `testchecks/management/commands/run_transcription_worker.py`
+  (+ `testchecks/management/__init__.py`, `testchecks/management/commands/__init__.py` —
+  пакетов не было). Ядро — `claim_batch` (`select_for_update(skip_locked=True)`,
+  PENDING→PROCESSING пачкой до `TRANSCRIBE_CONCURRENCY`), `reap_stale_jobs` (PROCESSING
+  с `locked_at` старше `TRANSCRIBE_JOB_TIMEOUT_MINUTES` → PENDING, с тем же
+  `select_for_update(skip_locked=True)` по одному джобу внутри короткой транзакции —
+  защита от двойного реапа), `_process_job` (скачивание `answer.file` во временный файл
+  тем же паттерном, что `lessons/services/video_processing.py::_download_to_local_path`
+  — S3 напрямую однопоточно/локальный диск через storage API — → `transcribe_video` →
+  `summarize_transcript` → `DONE`; исключение → `attempts+=1`, `PENDING` пока
+  `attempts < TRANSCRIBE_MAX_ATTEMPTS`, иначе `FAILED`). Параллелизм —
+  `ThreadPoolExecutor(max_workers=TRANSCRIBE_CONCURRENCY)`, `close_old_connections()`
+  в начале каждой задачи. Env: `TRANSCRIBE_CONCURRENCY=1`, `TRANSCRIBE_MAX_ATTEMPTS=3`,
+  `TRANSCRIBE_JOB_TIMEOUT_MINUTES=30` (плейсхолдер до замера p99 на step-00/09, см.
+  раздел «Reaper» этого файла), `TRANSCRIBE_POLL_INTERVAL_SECONDS=5`. Контекст для
+  `summarize_transcript` (`position` и т.п.) НЕ прокинут — не было в DoD этого шага,
+  `SummaryProvider` и так падает на дефолт при пустом `context`. Деплой (docker-compose
+  сервис, реплики) — не сделан, вне кода этого шага.
+- `2026-09-07` (обновление) — по решению владельца локальная проверка начата раньше
+  step-09/10, не отложена. `.venv` репозитория оказался битым (`pip`/интерпретатор
+  ссылались на путь `projects/sfera_backend/...` без `FullSphera` — репозиторий
+  переносили на диске); по прямому указанию владельца пересоздан с нуля
+  (`python3.12 -m venv`, старый сохранён рядом как `.venv.broken-old` вместо
+  удаления). `pip install -r requirements.txt` — **faster-whisper тянет ctranslate2,
+  НЕ torch** (легче, чем ожидалось изначально в плане). `.env` не понадобился — все
+  переменные в `sfera_backend/settings.py` имеют дефолты (`DB_POSTGRES_ON=False` →
+  sqlite, `USE_S3_STORAGE=False` → локальный диск). Прогон:
+  `python manage.py test testchecks` — 25 passed (включая первый реальный прогон
+  тестов E14-02/E14-03, до этого только `ast.parse`/`py_compile`); полный сьют
+  `python manage.py test` — **637 passed, 3 skipped, регрессий нет** (новый пакет
+  `testchecks/management/` не ломает остальное). Живого видео (реальный whisper +
+  реальный LLM-вызов) в этом прогоне НЕ было — только юнит-тесты на моках, живой
+  прогон видео/summary всё ещё на step-09 (нужны `PROXY_API_KEY`,
+  `TRANSCRIBE_ENABLED=true`, реальный видеофайл). Тестов на сам
+  `run_transcription_worker.py` (E14-04) ещё нет — это объём E14-08.
