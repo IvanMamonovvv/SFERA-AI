@@ -1,6 +1,6 @@
 # Step 04 — SummaryProvider (LLM): краткое summary содержания речи
 
-**Статус:** ⬜ TODO
+**Статус:** ✅ DONE (2026-09-07)
 **Зависит от:** выбор LLM-провайдера — **решено (2026-09-07): GPT-4o-mini через прокси** (proxyapi/vsegpt, РФ-прокси, оплата в рублях).
 **Цель:** из транскрипта сделать короткое summary для HR — о чём говорил кандидат, какой там текст.
 **Упрощено владельцем (2026-09-07):** без классификации/вердикта (TARGET/NON_TARGET) — только
@@ -75,4 +75,12 @@ class SummaryProvider(Protocol):
 - [ ] Невалидный ответ LLM не роняет воркер.
 
 ## Журнал
-- (пусто)
+- 2026-09-07: реализован `ProxyLLMProvider` (`gpt-4o-mini` через proxyapi, OpenAI-совместимый
+  REST) в `sfera_backend/testchecks/services/transcription/summary.py`. Модель
+  `SummaryPromptTemplate` (system_prompt/prompt_template/criteria/is_active) + admin.py +
+  миграция `0010_summaryprompttemplate.py`. Пустой транскрипт → LLM не вызывается. Невалидный
+  JSON → retry со строгой инструкцией, после — сырой ответ в summary, воркер не падает. Сетевая
+  недоступность → `SummaryProviderError` (для retry job в step-05, не глушится silently).
+  Тесты — `testchecks/tests/test_summary_provider.py`. Не проверено запуском (нет локального
+  venv/Docker в этой сессии) — только `py_compile` синтаксис; владельцу нужно прогнать
+  `pytest testchecks/tests/test_summary_provider.py` перед мержем.

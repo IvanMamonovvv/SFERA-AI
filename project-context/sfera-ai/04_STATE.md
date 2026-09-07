@@ -4,7 +4,13 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-07` — шаг **E14-02** (`TranscriptionProvider`,
+**Последнее обновление:** `2026-09-07` — шаг **E14-03** (`SummaryProvider`, LLM-пересказ
+через `ProxyLLMProvider`/`gpt-4o-mini`, код в `sfera_backend`) реализован по явному
+разрешению владельца. Не проверено запуском (нет локального venv/Docker в этой сессии,
+только `py_compile`) — владельцу нужно прогнать `pytest testchecks/tests/test_summary_provider.py`
+перед мержем. Не закоммичено. Детали — журнал ниже и `step-E14-03-summary-provider.md`.
+
+`2026-09-07` — шаг **E14-02** (`TranscriptionProvider`,
 faster-whisper, код в `sfera_backend`) реализован по явному разрешению владельца.
 Живой прогон на тестовом видео — на step-09 внешнего плана (faster-whisper тяжёлая
 зависимость, не установлена локально). Не закоммичено. Детали — журнал ниже и
@@ -247,10 +253,33 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E13-02 | Флаг «нет резюме» в CSV/PDF/API (`step-E13-02-resume-missing-flag.md`) | DONE | 2026-09-02 |
 | E14-01 | Постановка `TranscriptionJob` в очередь при загрузке видеовизитки (`step-E14-01-enqueue-on-completion.md`) | DONE | 2026-09-07 |
 | E14-02 | TranscriptionProvider (whisper) (`step-E14-02-transcription-provider.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
-| E14-03…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-03 | SummaryProvider (LLM-пересказ через `ProxyLLMProvider`) (`step-E14-03-summary-provider.md`) | DONE (код, не проверено запуском) | 2026-09-07 |
+| E14-04…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-09-07` — шаг **E14-03** (`SummaryProvider`, `sfera_backend`) реализован по
+  явному разрешению владельца на этот конкретный шаг. Новый модуль
+  `testchecks/services/transcription/summary.py`: `SummaryResult` (NamedTuple),
+  `SummaryProvider` Protocol, `ProxyLLMProvider` (`gpt-4o-mini` через proxyapi,
+  OpenAI-совместимый REST через `requests`, `SUMMARY_MODEL`/`PROXY_API_KEY`/
+  `PROXY_API_BASE` из env), `SummaryProviderError` (сетевая недоступность —
+  поднимается наружу для retry job на step-05, не глушится). Пустой транскрипт →
+  `EMPTY_SUMMARY_TEXT` без вызова LLM (экономия). Промпт собирается из активной
+  `SummaryPromptTemplate` (новая модель в `testchecks/models.py`: `system_prompt`,
+  `prompt_template`, `criteria`, `is_active` — редактируется в Django-admin без
+  релиза, `testchecks/admin.py` новый файл) либо дефолта из кода, если активного
+  шаблона нет. Невалидный JSON от LLM → retry со строгой системной инструкцией →
+  если снова не парсится, сырой текст сохраняется в `summary` без падения воркера.
+  Миграция `0010_summaryprompttemplate.py` (написана вручную — Django/venv не
+  установлены локально в этой сессии, `makemigrations` не запускался). Тесты —
+  `testchecks/tests/test_summary_provider.py` (моки `requests.post`, покрывают все
+  три DoD-пункта + сетевую ошибку). Проверено только `python3 -m py_compile`
+  (синтаксис) — **живой прогон `pytest`/`makemigrations --check` не сделан**,
+  нужен на стороне владельца перед коммитом. Изменения НЕ закоммичены в
+  `sfera_backend` (только рабочая копия). Детали — журнал
+  `step-E14-03-summary-provider.md` и внешний
+  `PLATFORM_video-transcription-plan/step-04-summary-provider.md`.
 - `2026-09-07` — шаг **E14-02** (`TranscriptionProvider`, `sfera_backend`) реализован
   по явному разрешению владельца на этот конкретный шаг. Новый модуль
   `testchecks/services/transcription/base.py`: `TranscriptionResult` (NamedTuple),
