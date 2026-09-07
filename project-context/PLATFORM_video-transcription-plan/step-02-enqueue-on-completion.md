@@ -1,6 +1,6 @@
 # Step 02 — Постановка задачи в очередь при загрузке видеовизитки
 
-**Статус:** ⬜ TODO
+**Статус:** ✅ DONE (2026-09-07)
 **Зависит от:** step-01.
 **Цель:** как только кандидат **загрузил видеовизитку** (сохранён `Answer` с `VIDEO_RECORDING` + файл в S3) →
 сразу создать `TranscriptionJob(PENDING)`. Не ждём завершения всей анкеты.
@@ -61,4 +61,16 @@
 - [ ] `TRANSCRIBE_ENABLED=false` → триггер не срабатывает.
 
 ## Журнал
-- (пусто)
+- `2026-09-07` — выполнено. Хук в `testchecks/views.py::QuestionAnswerView.
+  perform_create` (не `post_save`-сигнал — выбран явный вызов, как рекомендовалось),
+  `transaction.on_commit(lambda: TranscriptionJob.objects.get_or_create(answer=answer))`,
+  только для `question.question_type == VIDEO_RECORDING` с непустым `answer.file`, под
+  `TRANSCRIBE_ENABLED` (default `False`). Перезапись видео (п. «Перезапись видео»
+  этого файла) НЕ реализована: `Answer` уникален по `(attempt, question)`, апдейт-
+  эндпоинта нет, повторный `POST` падает на `IntegrityError` раньше — ветка сейчас
+  недостижима через API, владелец согласился пропустить. DoD 1/2/5 подтверждены
+  тестом (`test_transcription_enqueue.py`, 3 теста), DoD 3 (перезапись) не
+  применим по причине выше, DoD 4 (не замедлился веб-ответ) — постановка асинхронна
+  через `on_commit`, отдельно не замерялось. Детали процесса (branch/PR/merge-конфликты
+  main↔develop) — журнал `epics/E14-video-transcription-worker/step-E14-01-
+  enqueue-on-completion.md` в SFERA-AI.

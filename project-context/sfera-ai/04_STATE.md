@@ -4,7 +4,17 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-07` — заведён эпик **E14** (видео-транскрибация,
+**Последнее обновление:** `2026-09-07` — шаг **E14-02** (`TranscriptionProvider`,
+faster-whisper, код в `sfera_backend`) реализован по явному разрешению владельца.
+Живой прогон на тестовом видео — на step-09 внешнего плана (faster-whisper тяжёлая
+зависимость, не установлена локально). Не закоммичено. Детали — журнал ниже и
+`step-E14-02-transcription-provider.md`.
+
+`2026-09-07` — шаг **E14-01** (постановка `TranscriptionJob`
+в очередь при загрузке видеовизитки, код в `sfera_backend`) выполнен и влит в
+`main`/`develop`. Детали — журнал ниже и `step-E14-01-enqueue-on-completion.md`.
+
+`2026-09-07` — заведён эпик **E14** (видео-транскрибация,
 код в `sfera_backend`/`SPHERA`, план — `epics/E14-video-transcription-worker/`,
 `05_EPICS.md`). Владелец решил: LLM для summary — `gpt-4o-mini` через прокси, скоуп
 упрощён до транскрибации + краткого пересказа без классификации/вердикта (правки внесены
@@ -235,10 +245,43 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E12-01 | Кириллица в PDF AI-карточки (`step-E12-01-cyrillic-font.md`) | DONE | 2026-09-01 |
 | E13-01 | Приоритет резюме в промпте fit-scoring (`step-E13-01-resume-priority-prompt.md`) | DONE | 2026-09-02 |
 | E13-02 | Флаг «нет резюме» в CSV/PDF/API (`step-E13-02-resume-missing-flag.md`) | DONE | 2026-09-02 |
-| E14-01…09 | Реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-01 | Постановка `TranscriptionJob` в очередь при загрузке видеовизитки (`step-E14-01-enqueue-on-completion.md`) | DONE | 2026-09-07 |
+| E14-02 | TranscriptionProvider (whisper) (`step-E14-02-transcription-provider.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
+| E14-03…09 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-09-07` — шаг **E14-02** (`TranscriptionProvider`, `sfera_backend`) реализован
+  по явному разрешению владельца на этот конкретный шаг. Новый модуль
+  `testchecks/services/transcription/base.py`: `TranscriptionResult` (NamedTuple),
+  `TranscriptionProvider` Protocol, `LocalFasterWhisperProvider` (faster-whisper,
+  модель-синглтон на класс, `language=ru`, `WHISPER_MODEL_SIZE` из env, default
+  `small` — решение владельца, step-00 внешнего плана), `extract_audio_wav`
+  (ffmpeg-паттерн, скопирован из `lessons/services/video_processing.py`),
+  `transcribe_video` (оркестрация: временный wav → провайдер → удаление в `finally`,
+  битый/пустой файл и ffmpeg-ошибка → `is_empty=True` без исключений), фабрика
+  `get_transcription_provider()` по env `TRANSCRIBE_PROVIDER` (default `local`;
+  `yandex`/`proxy` — `NotImplementedError`, сознательно вне объёма шага по решению
+  владельца). Добавлена зависимость `faster-whisper==1.1.1` в `requirements.txt`.
+  `ruff check` чисто. **faster-whisper не установлен в `.venv`** (тяжёлая зависимость
+  с torch) — живой прогон на тестовом русском видео (последний открытый DoD-пункт)
+  перенесён на step-09-tests-smoke.md внешнего плана по решению владельца. Изменения
+  НЕ закоммичены в `sfera_backend` (только рабочая копия). Детали — журнал
+  `step-E14-02-transcription-provider.md` и внешний
+  `PLATFORM_video-transcription-plan/step-03-transcription-provider.md`/`01_STATE.md`.
+- `2026-09-07` — шаг **E14-01** (постановка `TranscriptionJob` в очередь при загрузке
+  видеовизитки, `sfera_backend`) выполнен по явному разрешению владельца на этот
+  конкретный шаг. Хук в `testchecks/views.py::QuestionAnswerView.perform_create`,
+  `transaction.on_commit`, `get_or_create`, флаг `TRANSCRIBE_ENABLED` (default off).
+  Кейс «перезапись видео» пропущен по согласованию — недостижим через API (`Answer`
+  уникален по `attempt+question`, апдейт-эндпоинта нет). Тесты — 3 новых, полный сьют
+  `sfera_backend` 632 passed. По ходу вскрылось и починено расхождение веток: PR был
+  отведён от `main`, но направлен в `develop`, которые разошлись (`TranscriptionJob`
+  из шага 01 была влита только в `main`) — владелец переоткрыл PR в `main`, затем
+  сделан обратный проход синхронизации `sync/develop-into-main` +
+  `sync/main-into-develop`, обе ветки снова совпадают, потери функционала нет
+  (проверено). Детали — журнал `step-E14-01-enqueue-on-completion.md` и внешний
+  `PLATFORM_video-transcription-plan/step-02-enqueue-on-completion.md`/`01_STATE.md`.
 - `2026-09-01` — шаг `step-E11-02-reverify-borderline-candidates.md` выполнен,
   **эпик E11 полностью завершён**. Владелец выбрал постоянный CLI-флаг
   `--candidate-ids` (не одноразовый scratch-скрипт) — `run_full_course_screening.py`:
