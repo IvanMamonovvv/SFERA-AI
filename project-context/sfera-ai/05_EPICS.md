@@ -26,6 +26,7 @@
 | E9 | Export (по запросу, после появления UI) | E6, E8 | — |
 | E10 | Ручной прогон вакансии + сборка портрета из ссылки (CLI, demo без UI) | E6, E9 | средний (реальные LLM-вызовы на всех кандидатах вакансии) |
 | E13 | Приоритет источников (резюме > ответы > видео) + видимость «нет резюме» | E6, E9, E10 | низкий-средний (меняет промпт fit-scoring, версия промпта) |
+| E14 | Реализация видео-транскрибации в `sfera_backend` (внешний код, трекинг из SFERA-AI) | E4 | требует явного разрешения владельца на каждый шаг — другой репозиторий |
 
 ## Разбивка на шаги
 
@@ -247,6 +248,58 @@
 прогоном по новой логике (решение владельца 2026-09-01, не дублировать работу
 из E11-02).
 
+### E14 — Реализация видео-транскрибации в `sfera_backend`
+
+**Другой репозиторий.** Весь код этого эпика — `sfera_backend`/`SPHERA`, НЕ `SFERA-AI`.
+По правилу проекта (`CLAUDE.md`) менять их код нельзя без отдельного явного разрешения
+владельца на каждую конкретную правку — эпик здесь только трекает план и порядок, само
+согласование шагов из `SFERA-AI` не выдаётся. Полная детальная спецификация каждого шага
+(интерфейсы, edge cases, DoD) — в `project-context/PLATFORM_video-transcription-plan/
+step-NN-*.md`; шаги ниже — только краткая карта + явное указание где/что делать (не
+дублировать содержимое, «один факт — один файл»). Порядок и зависимости между шагами —
+`project-context/PLATFORM_video-transcription-plan/EXECUTION_PLAN.md`. Прогресс внешнего
+плана (00-01 DONE) — `project-context/PLATFORM_video-transcription-plan/01_STATE.md`,
+не дублировать в `04_STATE.md` этого репозитория, только ссылаться.
+
+Решено владельцем (2026-09-07): LLM для summary — `gpt-4o-mini` через прокси; скоуп —
+только транскрибация + краткий пересказ содержания, без классификации/вердикта.
+
+- [ ] `epics/E14-video-transcription-worker/step-E14-01-enqueue-on-completion.md` —
+  репозиторий `sfera_backend`, `testchecks/views.py`/`perform_create` (или `post_save`
+  сигнал) — постановка `TranscriptionJob(PENDING)` при загрузке видеовизитки.
+  Детали — `PLATFORM_video-transcription-plan/step-02-enqueue-on-completion.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-02-transcription-provider.md` —
+  репозиторий `sfera_backend`, новый `testchecks/services/transcription/base.py` +
+  `LocalFasterWhisperProvider`. Детали —
+  `PLATFORM_video-transcription-plan/step-03-transcription-provider.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-03-summary-provider.md` —
+  репозиторий `sfera_backend`, `ProxyLLMProvider` (`gpt-4o-mini`), `SummaryPromptTemplate`.
+  Детали — `PLATFORM_video-transcription-plan/step-04-summary-provider.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-04-worker-command.md` —
+  репозиторий `sfera_backend`, `testchecks/management/commands/run_transcription_worker.py`.
+  Детали — `PLATFORM_video-transcription-plan/step-05-worker-command.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-05-api-expose.md` — репозиторий
+  `sfera_backend`, сериализатор карточки кандидата + OpenAPI/`03_API.md`. Детали —
+  `PLATFORM_video-transcription-plan/step-06-api-expose.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-06-hr-ui.md` — репозиторий `SPHERA`
+  (фронтенд), `src/domains/Candidate/`. Детали —
+  `PLATFORM_video-transcription-plan/step-07-hr-ui.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-07-retention-guard.md` — репозиторий
+  `sfera_backend`, `core/scheduler.py::clean_expired_videos`/`check_disk_pressure`.
+  Детали — `PLATFORM_video-transcription-plan/step-08-retention-guard.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-08-tests-smoke.md` — репозиторий
+  `sfera_backend`, юнит-тесты + `06_TEST_CHECKLIST.md`. Детали —
+  `PLATFORM_video-transcription-plan/step-09-tests-smoke.md`.
+- [ ] `epics/E14-video-transcription-worker/step-E14-09-prod-rollout.md` — репозиторий
+  `sfera_backend`, `docker-compose`/деплой VPS. Детали —
+  `PLATFORM_video-transcription-plan/step-10-prod-rollout.md`. Готово: HR видит
+- [ ] `epics/E14-video-transcription-worker/step-E14-10-change-detection-video.md` — репозиторий
+  `SFERA-AI` (этот, не `sfera_backend`). Найдено архитектурным ревью 2026-09-07: change detection
+  (`compute_current_sources_snapshot`, эпик E5) не замечает готовность `TranscriptionJob` — без
+  этого шага видео-факты не попадают в `CandidateProfile.facts`/`fit_score`. Зависит от
+  E14-01/02/03.
+  транскрипт + пересказ видеовизитки в проде.
+
 ## Граф зависимостей
 
 E0 → E1, E2, E4
@@ -261,3 +314,4 @@ E6, E9 → E10
 E10 → E11
 E9 → E12
 E6, E9, E10 → E13
+E4 → E14 (реализация в sfera_backend, каждый шаг — отдельное разрешение владельца)

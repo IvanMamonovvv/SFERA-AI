@@ -16,9 +16,9 @@
 TRANSCRIBE_PROVIDER=local            # local | yandex | proxy  (рубильник)
 WHISPER_MODEL_SIZE=small             # из step-00
 TRANSCRIBE_CONCURRENCY=2             # из step-00
-SUMMARY_PROVIDER=gigachat            # gigachat | proxy
-# ключи по выбранным провайдерам:
-GIGACHAT_API_KEY=...  / PROXY_API_KEY=...  / YANDEX_STT_KEY=...
+SUMMARY_PROVIDER=proxy               # решено 2026-09-07: gpt-4o-mini через proxyapi/vsegpt
+SUMMARY_MODEL=gpt-4o-mini
+PROXY_API_KEY=...
 TRANSCRIBE_MAX_ATTEMPTS=3
 ```
 

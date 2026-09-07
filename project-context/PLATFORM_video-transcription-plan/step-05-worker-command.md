@@ -38,8 +38,8 @@ loop:
         для job:
             1. answer.file → временный wav (ffmpeg)
             2. TranscriptionProvider.transcribe → transcript, is_empty
-            3. SummaryProvider.summarize → summary, verdict
-            4. сохранить: transcript_text, summary_text, verdict, is_empty,
+            3. SummaryProvider.summarize → summary (без verdict — упрощено владельцем 2026-09-07)
+            4. сохранить: transcript_text, summary_text, is_empty,
                status=DONE, finished_at
             при исключении:
                attempts += 1; error=...; 
@@ -53,8 +53,17 @@ loop:
 
 ## Reaper зависших джобов
 
-Отдельная периодическая проверка (можно в `core/scheduler.py`): `PROCESSING` с `locked_at` старше N минут
-→ вернуть в `PENDING` (воркер упал/перезапущен). Ограничить `attempts`, чтобы не крутить вечно.
+Отдельная периодическая проверка (можно в `core/scheduler.py`): `PROCESSING` с `locked_at` старше
+`TRANSCRIBE_JOB_TIMEOUT_MINUTES` → вернуть в `PENDING` (воркер упал/перезапущен). Ограничить
+`attempts`, чтобы не крутить вечно.
+
+**Как выбрать число (не оставлять текстовым плейсхолдером):** таймаут = p99-время обработки одного
+видео (замеряется в step-00 на реальном VPS, длинные видео тоже) **× 3–5** — запас на случай, если
+сервер под нагрузкой обрабатывает дольше обычного. Слишком маленький таймаут даёт риск: реальный
+воркер ещё не завис, а просто долго обрабатывает — reaper вернёт джоб в очередь, второй воркер
+возьмёт тот же файл параллельно, оба допишут в одну строку `TranscriptionJob` (гонка записи,
+частичный/битый результат). Конкретное число — зафиксировать в env `TRANSCRIBE_JOB_TIMEOUT_MINUTES`
+по факту замера step-00/step-09, до начала step-10 (прод-раскатка).
 
 ## Поведение при пиках/завалах (ответ на вопрос владельца)
 
