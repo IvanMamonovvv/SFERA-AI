@@ -4,7 +4,25 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — заведён и реализован эпик **E16**
+**Последнее обновление:** `2026-09-09` (новое) — при подготовке первого прод-деплоя E16
+найден и закрыт архитектурный баг: `HHClient` резолвил `company_slug` из ОДНОГО глобального
+`.env` (`HH_BACKEND_COMPANY_SLUG`), хотя платформа мультитенантна (`Course.company` FK ->
+`companies_company.slug`, подтверждено чтением `sfera_backend/sfera_backend/courses/models.py`
+и `.../companies/models.py`) — с одним захардкоженным slug HH-резюме подтягивались бы
+корректно только для одной компании, для остальных ломались бы молча (backend вернул бы
+404/чужие данные). Исправлено: `HHClient.get_resume_pdf(hh_negotiation_id, company_slug)` —
+slug теперь передаётся per-call, не в конструкторе. Резолвится через reflection: для
+сконвертировавшихся кандидатов `Course.company_id -> Company.slug`
+(`resolve_company_slug_for_course`, `services/api_read.py`); для чистых HH-лидов (ещё нет
+`Application`) — `HHNegotiationRecord.mapping -> VacancyCourseMapping.course -> Course.company`
+(`resolve_company_slug_for_hh_negotiation`) — `mapping` может быть `NULL` (лид не привязан к
+вакансии), тогда `ResumeFetchError` → `ResumeExtract.status=FAILED`, не блокирует пайплайн.
+`HH_BACKEND_COMPANY_SLUG` убран из `Settings` совсем. Затронуты `hh_client.py`, `platform_db.py`
+(новые `HH_RESUME_COMPANY_TABLES`, расширены `API_READ_TABLES`/`RESUME_DETECTION_TABLES`),
+`api/app.py`, `cli/run_resume_pipeline.py`, `cli/run_full_course_screening.py`,
+`services/resume_fetch.py`. Тест-сьют — 206 passed. Коммит `0af0089`.
+
+Предыдущее: заведён и реализован эпик **E16**
 (деплой сервиса на VPS, `epics/E16-service-deployment/`). Найдено при обсуждении прод-релиза
 E15: `docker-compose.yml` поднимал только `ai-service` (FastAPI/uvicorn) — `scheduler.py`
 (тик очереди `AIProcessingJob` раз в 30 минут, `run_requeue_stuck`, `run_pii_retention`)
