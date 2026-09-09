@@ -9,7 +9,7 @@ from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.platform_db import CANDIDATE_FACTS_TABLES, reflect_platform_tables
 from sfera_ai.providers import LLMResult
-from sfera_ai.services.candidate_facts import build_or_update_candidate_facts, resume_status
+from sfera_ai.services.candidate_facts import build_or_update_candidate_facts, pick_fact_value, resume_status
 
 
 def _platform_base(*, application=(7, 100, 5, "2026-08-20T10:00:00"), answers=(), transcription_jobs=()):
@@ -252,6 +252,32 @@ def test_resume_facts_picked_up_on_retry_even_when_platform_snapshot_unchanged(t
         assert {"key": "experience_years", "value": 13, "confidence": "MEDIUM",
                 "evidence": [{"source_type": "HH_RESUME", "source_id": extract.id}]} in second.facts
         assert llm_client.complete.call_count == 1  # LLM повторно не звали — новых ответов не было
+
+
+def test_pick_fact_value_prefers_resume_over_answer_on_conflict():
+    facts = [
+        {"key": "city", "value": "Москва (анкета)", "evidence": [{"source_type": "ANSWER", "source_id": 1}]},
+        {"key": "city", "value": "Санкт-Петербург (резюме)", "evidence": [{"source_type": "HH_RESUME", "source_id": 2}]},
+    ]
+    assert pick_fact_value(facts, "city") == "Санкт-Петербург (резюме)"
+
+
+def test_pick_fact_value_prefers_answer_over_video_on_conflict():
+    facts = [
+        {"key": "motivation", "value": "из видео", "evidence": [{"source_type": "VIDEO", "source_id": 1}]},
+        {"key": "motivation", "value": "из анкеты", "evidence": [{"source_type": "ANSWER", "source_id": 2}]},
+    ]
+    assert pick_fact_value(facts, "motivation") == "из анкеты"
+
+
+def test_pick_fact_value_falls_back_to_answer_when_resume_absent():
+    facts = [{"key": "city", "value": "Москва (анкета)", "evidence": [{"source_type": "ANSWER", "source_id": 1}]}]
+    assert pick_fact_value(facts, "city") == "Москва (анкета)"
+
+
+def test_pick_fact_value_returns_none_when_key_missing():
+    facts = [{"key": "city", "value": "Москва", "evidence": [{"source_type": "ANSWER", "source_id": 1}]}]
+    assert pick_fact_value(facts, "salary_expectation") is None
 
 
 def test_resume_status_missing_when_no_extracts():

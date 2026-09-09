@@ -14,7 +14,9 @@ _SYSTEM_PROMPT = (
     "JSON-объект без пояснений и markdown-обёртки со следующими полями: "
     "full_name (строка, ФИО кандидата, или null если не найдено), "
     "experience_years (число, общий стаж в годах), positions (список должностей), "
-    "companies (список компаний), salary_expectation (строка или null)."
+    "companies (список компаний), salary_expectation (строка или null), "
+    "phone_number (строка, телефон кандидата, или null если не найден), "
+    "city (строка, город проживания кандидата, или null если не найден)."
 )
 
 _ERROR_TRUNCATE_LEN = 2000

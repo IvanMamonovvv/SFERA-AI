@@ -42,6 +42,16 @@ def _fetch_hh_resume(extract: ResumeExtract, *, session: Session, platform_base,
         raise ResumeFetchError(str(exc)) from exc
 
 
+def _dispatch_fetch(
+    extract: ResumeExtract, *, session: Session, platform_base, hh_client: HHClient, s3_client, s3_bucket: str
+) -> bytes:
+    if extract.source_type == "ANKETA_FILE":
+        return _fetch_anketa_file(extract, platform_base=platform_base, s3_client=s3_client, s3_bucket=s3_bucket)
+    if extract.source_type == "HH_RESUME":
+        return _fetch_hh_resume(extract, session=session, platform_base=platform_base, hh_client=hh_client)
+    raise ResumeFetchError(f"неизвестный source_type: {extract.source_type}")
+
+
 def fetch_resume_bytes(
     extract: ResumeExtract,
     *,
@@ -54,15 +64,38 @@ def fetch_resume_bytes(
     """Диспетчер по `source_type`. При ошибке переводит `extract` в `FAILED` с текстом
     ошибки и возвращает `None` — не бросает исключение наружу (03_TDD.md, «Failure
     Scenarios»: HH API недоступен / битый resume → FAILED, не блокирует остальной
-    пайплайн)."""
+    пайплайн). Использовать только для первичной экстракции (`resume_pipeline.py`) —
+    `status` здесь отражает успех экстракции, мутировать его можно только там."""
     try:
-        if extract.source_type == "ANKETA_FILE":
-            return _fetch_anketa_file(extract, platform_base=platform_base, s3_client=s3_client, s3_bucket=s3_bucket)
-        if extract.source_type == "HH_RESUME":
-            return _fetch_hh_resume(extract, session=session, platform_base=platform_base, hh_client=hh_client)
-        raise ResumeFetchError(f"неизвестный source_type: {extract.source_type}")
+        return _dispatch_fetch(
+            extract, session=session, platform_base=platform_base, hh_client=hh_client,
+            s3_client=s3_client, s3_bucket=s3_bucket,
+        )
     except ResumeFetchError as exc:
         extract.status = "FAILED"
         extract.error = str(exc)
         session.commit()
+        return None
+
+
+def fetch_resume_bytes_readonly(
+    extract: ResumeExtract,
+    *,
+    session: Session,
+    platform_base,
+    hh_client: HHClient,
+    s3_client,
+    s3_bucket: str,
+) -> bytes | None:
+    """Повторное скачивание уже готового (`status=DONE`) резюме — для вложения оригинала
+    в export-архив. В отличие от `fetch_resume_bytes`, при ошибке НЕ мутирует
+    `extract.status`: этот статус отражает успех экстракции текста, а не доступность
+    файла прямо сейчас — временный сбой сети/HH при повторном скачивании не должен
+    портить уже готовую экстракцию (баг кандидата 2398, `04_STATE.md` 2026-09-06/E17-02)."""
+    try:
+        return _dispatch_fetch(
+            extract, session=session, platform_base=platform_base, hh_client=hh_client,
+            s3_client=s3_client, s3_bucket=s3_bucket,
+        )
+    except ResumeFetchError:
         return None
