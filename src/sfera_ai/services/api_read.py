@@ -237,6 +237,23 @@ def _demo_progress_by_candidate_profile(
     return result
 
 
+def _application_id_by_candidate_profile(session: Session, candidate_profile_ids: list[int]) -> dict[int, int | None]:
+    """`CandidateProfile.application_id` (платформенный `Application.id`) по профилю —
+    ключ, по которому фронтенд SPHERA сопоставляет строку скрининга с уже загруженной
+    карточкой кандидата (имя/email), т.к. `candidate_profile_id` — внутренний
+    идентификатор SFERA-AI, платформе неизвестный (step-E15-08). `None` — кандидат
+    привязан только по `hh_negotiation_id`, без `Application` (см. constraint
+    `CandidateProfile`), фронтенд в этом случае карточку не находит."""
+    if not candidate_profile_ids:
+        return {}
+    rows = session.execute(
+        select(CandidateProfile.id, CandidateProfile.application_id).where(
+            CandidateProfile.id.in_(candidate_profile_ids)
+        )
+    ).all()
+    return {row.id: row.application_id for row in rows}
+
+
 def _resume_status_by_candidate_profile(session: Session, candidate_profile_ids: list[int]) -> dict[int, str]:
     """Батч-загрузка `ResumeExtract` по всем кандидатам страницы одним запросом
     (E13-02) — без N+1 на кандидата, аналогично `_demo_progress_by_candidate_profile`."""
@@ -328,6 +345,7 @@ def list_screening_candidates(session: Session, platform_base, course_id: int) -
     candidate_profile_ids = [row.candidate_profile_id for row in rows]
     demo_progress_map = _demo_progress_by_candidate_profile(session, platform_base, course_id, candidate_profile_ids)
     resume_status_map = _resume_status_by_candidate_profile(session, candidate_profile_ids)
+    application_id_map = _application_id_by_candidate_profile(session, candidate_profile_ids)
     transferred_ids = set(
         session.scalars(
             select(CandidateVacancyTransfer.candidate_profile_id).where(
@@ -354,6 +372,7 @@ def list_screening_candidates(session: Session, platform_base, course_id: int) -
         items.append(
             {
                 "candidate_profile_id": analysis.candidate_profile_id,
+                "application_id": application_id_map.get(analysis.candidate_profile_id),
                 "fit_score": analysis.fit_score,
                 "confidence": analysis.confidence,
                 "data_completeness": analysis.data_completeness,

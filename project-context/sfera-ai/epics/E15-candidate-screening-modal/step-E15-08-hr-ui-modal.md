@@ -1,6 +1,6 @@
 # Шаг E15-08 — Кнопка и модалка «Обработка кандидатов» (фронтенд)
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Frontend (`SPHERA`) · **Зависит от:** E15-06
 **Репозиторий:** `SPHERA` — требует отдельного явного разрешения владельца перед
 стартом (`CLAUDE.md`).
@@ -46,4 +46,59 @@ HR видит кнопку «Обработка кандидатов» рядо�
 
 ## Журнал
 
-- (не начато — ждёт отдельного разрешения владельца на правку `SPHERA`)
+- `2026-09-09` — реализовано по явному разрешению владельца. По ходу реализации
+  найдены и закрыты (с отдельным согласованием владельца) три расхождения дизайна с
+  уже сданными шагами E15-03/06/07:
+  1. **`requirements` — JSON, не текст.** `POST vacancy-profile/` (и SFERA-AI, и
+     проксирующий endpoint) жёстко требует `requirements: dict`, конвертации
+     текст→JSON на этом пути нет (`build_vacancy_requirements` — только в отдельном
+     CLI E10). Решение владельца: textarea показывает
+     `JSON.stringify(requirements, null, 2)`, HR правит как текст, «Сохранить» делает
+     `JSON.parse` и шлёт dict; невалидный JSON — инлайн-ошибка, модалка не закрывается,
+     запрос не уходит.
+  2. **Не было `GET vacancy-profile/` прокси** — E15-06/07 сделали только `POST`,
+     без него нечем предзаполнить textarea (явный DoD). Добавлен `GET` в тот же
+     `VacancyProfileProxyView` (переименован из `VacancyProfileProxyCreateView`) +
+     `fetch_vacancy_profile` в `integrations/sfera_ai/client.py` (404 от SFERA-AI →
+     `None`, не ошибка — портрета ещё не было).
+  3. **В `GET candidates/screening/` не было ключа для сопоставления с фронтендом.**
+     `candidate_profile_id` — внутренний id SFERA-AI, платформе (и `candidateStore`
+     SPHERA) неизвестный; имени/email кандидата в ответе нет вообще (сознательно,
+     «поля как в `candidates/`», E8-02). Добавлено поле `application_id` (nullable —
+     `null` у HH-лидов без `Application`) в `list_screening_candidates`
+     (`services/api_read.py`, SFERA-AI) — фронтенд ищет по нему в уже загруженном
+     `candidateStore.candidates` за именем/email; без совпадения — `Отклик #<id>`.
+  Также найден и исправлен смежный баг общей инфраструктуры SPHERA: BFF-прокси
+  `src/app/api/proxy/[[...path]]/route.ts` конвертировал тело ответа через `.text()` —
+  портило бы бинарный `application/zip` при экспорте. Исправлено на `arrayBuffer()` +
+  проброс `Content-Disposition` (безопасно и для существующих JSON-ответов).
+
+  Новый код (`SPHERA`): домен `domains/CandidateScreening/` (`model.ts`,
+  `repositories/candidate-screening-repository.ts` — GET/POST через
+  `restProviderInstance`, экспорт — отдельный `fetch` на `/api/proxy/...` с
+  `credentials: "include"`, т.к. `RestProvider` всегда парсит JSON и не умеет blob);
+  `shared/lib/download-blob-file.ts` (по образцу `download-text-file.ts`); виджет
+  `CandidateScreeningModal.tsx` (+ `.module.scss`) — по образцу `CandidateMergeModal.tsx`
+  (тот же `Modal`, та же state-machine `loading/ready/error`). Кнопка «Обработка
+  кандидатов» в `CandidatesWorkspace.tsx` — рядом с «Выгрузить архив», без
+  дополнительного `appRole`-гейта (тот же уровень доступа, что и у экспорта —
+  экспорт тоже не гейтится ролью). «Выгрузить список» — экспортирует всех
+  показанных в модалке кандидатов одним zip (выбора чекбоксами дизайн не описывал).
+  После любого экспорта список кандидатов перезапрашивается — обновляет бейджи
+  «передан» с бэкенда, а не оптимистично.
+
+  Правки в `sfera_backend`: `VacancyProfileProxyView` (GET+POST),
+  `integrations/sfera_ai/client.py::fetch_vacancy_profile`, новые тесты в
+  `test_sfera_ai_proxy_views.py`/`integrations/sfera_ai/tests/test_client.py`.
+  Правки в `SFERA-AI`: `api_read.py::_application_id_by_candidate_profile` +
+  поле `application_id` в `list_screening_candidates`, тест в
+  `tests/api/test_candidates_list.py` дополнен двумя assert.
+
+  Проверено: `npx tsc --noEmit` и `eslint --fix` по правленым файлам SPHERA — чисто
+  (один pre-existing `react-hooks/exhaustive-deps` warning в `CandidatesWorkspace.tsx`,
+  подтверждён `git stash` — не от этой правки). `manage.py test` весь `sfera_backend` —
+  684 passed, 3 skipped, регрессий нет. `uv run pytest` весь `SFERA-AI` — 205 passed.
+  Ручная проверка в браузере (golden path + пустой список) **не выполнена** — нет
+  запущенного dev-сервера SPHERA/staging окружения в этой сессии; DoD «как проверить»
+  остаётся открытым пунктом для владельца перед мержем. Ничего не закоммичено ни в
+  одном из трёх репозиториев — ждёт решения владельца по коммиту/PR.

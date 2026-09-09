@@ -58,7 +58,9 @@ python manage.py test integrations.sfera_ai
   без OAuth, по образцу `integrations/wazzup/client.py` (простой module-level
   клиент, не класс, как у HH — секрет один, без токен-обмена/refresh). Три
   функции под три вызова E15-06: `fetch_screening_candidates`,
-  `create_vacancy_profile`, `export_candidates`. Общий `_request` шлёт заголовок
+  `create_vacancy_profile`, `export_candidates` (на шаге E15-08 добавлена четвёртая —
+  `fetch_vacancy_profile`, `GET .../vacancy-profile/`, 404 от SFERA-AI → `None`, не
+  ошибка — портрета ещё не создавали). Общий `_request` шлёт заголовок
   `X-BFF-Shared-Secret` (совпадает с ожиданием `make_bff_secret_dependency` на
   стороне SFERA-AI), ловит `requests.RequestException` (сеть/таймаут) и не-2xx
   ответ, оборачивает в `SferaAiError(status_code=...)` — `status_code=None`
