@@ -4,7 +4,23 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E14-09** (prod rollout) выполнен,
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E14-10** (change detection на
+видео-транскрипт, свой репозиторий SFERA-AI) реализован. `compute_current_sources_snapshot()`
+(`services/change_detection.py`) дополнен 6-м полем `video_transcript_finished_at`
+(`MAX(TranscriptionJob.finished_at)` через join на `testchecks_answer`/`testchecks_testattempt`
+по `candidate_id`) — готовность транскрипта (`PENDING→DONE`) теперь меняет снапшот и триггерит
+`needs_profile_rebuild`, даже если остальные 5 полей не изменились (раньше `_video_facts` не
+попадали в `CandidateProfile.facts`, пока профиль не пересобирался по другой причине). `platform_db.py`:
+`testchecks_transcriptionjob` перенесён из отдельного `CANDIDATE_FACTS_TABLES` в
+`CHANGE_DETECTION_TABLES` (используется теперь и `scheduler.py`/`job_detection.py`). Новый
+юнит-тест `test_stale_when_video_transcript_finishes`, три существующих тестовых фикстуры
+(`test_change_detection.py`/`test_candidate_facts.py`/`test_job_detection.py`) дополнены таблицей/
+колонкой `finished_at`. `pytest tests/` — 190 passed, регрессий нет. Не хватает только
+staging-проверки на реальном `TranscriptionJob(DONE)` (DoD п.4) — ждёт деплоя E14-01/02/03.
+Детали — журнал `step-E14-10-change-detection-video.md`. **Эпик E14 полностью завершён (код)**,
+staging-верификация — единственный открытый пункт.
+
+`2026-09-09` (предыдущее) — шаг **E14-09** (prod rollout) выполнен,
 эпик E14 близок к завершению — остался E14-10. Код: PR #128 в `sfera_backend` (смёржен в `main`) —
 сервис `transcribe-worker` в `docker-compose.staging.yml` + документация env в
 `.env.example`; по правке владельца секрет переименован в код `OPENROUTER_API_KEY`
@@ -338,10 +354,10 @@ LLM summary, воркер) пока не реализованы — не бло�
 
 ## Текущий следующий шаг
 
-**Эпик E14 не завершён** — E14-01…09 DONE (prod rollout подтверждён живым видео
-на проде 2026-09-09), остался **E14-10** (change detection на видео-транскрипт,
-свой репозиторий SFERA-AI, без ограничения на разрешение) — не начат, ждёт
-«начинай» от владельца.
+**Эпик E14 завершён по коду** — E14-01…10 DONE (prod rollout подтверждён живым видео
+на проде 2026-09-09; E14-10 change detection реализован и покрыт тестами 2026-09-09).
+Открыт только один пункт DoD E14-10 — проверка на staging на реальном
+`TranscriptionJob(DONE)` (ждёт своего момента, не блокирует остальную работу).
 
 **Эпик E15 заведён** (2026-09-09, «Обработка кандидатов») — план готов
 (`epics/E15-candidate-screening-modal/`), реализация не начата, ждёт «начинай» от
@@ -407,7 +423,7 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-07 | Retention guard, код в `sfera_backend` (`step-E14-07-retention-guard.md`) | DONE | 2026-09-09 |
 | E14-08 | Тесты и smoke воркера транскрибации, код в `sfera_backend` (`step-E14-08-tests-smoke.md`) | DONE (автотесты; ручной smoke заведён, не пройден живым видео) | 2026-09-09 |
 | E14-09 | Prod rollout, код в `sfera_backend` (`step-E14-09-prod-rollout.md`) | DONE | 2026-09-09 |
-| E14-10 | Change detection на видео-транскрипт (`SFERA-AI`, свой репозиторий) | TODO | — |
+| E14-10 | Change detection на видео-транскрипт (`SFERA-AI`, свой репозиторий) (`step-E14-10-change-detection-video.md`) | DONE (код+тесты; staging-проверка на реальном TranscriptionJob(DONE) — отдельно) | 2026-09-09 |
 | E15-01…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)

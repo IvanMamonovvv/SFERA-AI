@@ -31,6 +31,10 @@ def _platform_base(*, applications=(), hh_records=()):
             "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, "
             "application_id INTEGER, modified_at DATETIME, hh_resume_id TEXT)"
         )
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_transcriptionjob (id INTEGER PRIMARY KEY, answer_id INTEGER, "
+            "status TEXT, finished_at DATETIME)"
+        )
         for app_id, candidate_id, course_id in applications:
             conn.exec_driver_sql(
                 f"INSERT INTO courses_application (id, candidate_id, course_id, modified_at) "

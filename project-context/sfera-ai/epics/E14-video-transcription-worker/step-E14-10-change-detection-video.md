@@ -1,6 +1,7 @@
 # Шаг E14-10 — Change detection должен замечать готовый транскрипт видео
 
-**Статус:** TODO
+**Статус:** DONE (код+тесты). Staging-проверка на реальном TranscriptionJob(DONE) — отдельно, после
+деплоя E14-01/02/03.
 **Слой:** Backend · **Зависит от:** E14-01, E14-02, E14-03 (нужен реальный `TranscriptionJob`
 со статусом `DONE`, чтобы проверить фикс на живых данных)
 **Репозиторий:** `SFERA-AI` (этот репозиторий, не `sfera_backend`) — правка в уже сданном коде
@@ -48,11 +49,11 @@
 
 ## Критерии готовности (DoD)
 
-- [ ] Снапшот включает состояние `TranscriptionJob` кандидата (готовность транскрипта меняет
+- [x] Снапшот включает состояние `TranscriptionJob` кандидата (готовность транскрипта меняет
       значение поля).
-- [ ] Юнит-тест: `TranscriptionJob` переходит `PENDING → DONE` → `needs_profile_rebuild` возвращает
+- [x] Юнит-тест: `TranscriptionJob` переходит `PENDING → DONE` → `needs_profile_rebuild` возвращает
       `True`, даже если остальные 5 полей не изменились.
-- [ ] Существующие тесты `change_detection.py`/`candidate_facts.py` не сломаны.
+- [x] Существующие тесты `change_detection.py`/`candidate_facts.py` не сломаны.
 - [ ] Проверено на staging на реальном `TranscriptionJob(DONE)` — профиль кандидата
       пересобрался, `_video_facts` попали в `CandidateProfile.facts`.
 
@@ -69,4 +70,15 @@ pytest tests/services/test_candidate_facts.py -v
 
 ## Журнал
 
-- (пусто)
+- 2026-09-09: `compute_current_sources_snapshot()` — 6-е поле снапшота `video_transcript_finished_at`
+  (`MAX(TranscriptionJob.finished_at)` через join `testchecks_transcriptionjob` →
+  `testchecks_answer` → `testchecks_testattempt` по `candidate_id`, паттерн как у `max_answer_id`).
+  `CHANGE_DETECTION_TABLES` (`platform_db.py`) дополнен `testchecks_transcriptionjob` (раньше был
+  только в `CANDIDATE_FACTS_TABLES`) — теперь используется той же таблицей reflection и в
+  `scheduler.py`/`job_detection.py`. Новый юнит-тест `test_stale_when_video_transcript_finishes`
+  (`test_change_detection.py`) — PENDING→DONE меняет снапшот, остальные 5 полей неизменны →
+  `needs_profile_rebuild` = `True`. Существующие фикстуры `_platform_base` (test_change_detection.py,
+  test_candidate_facts.py, test_job_detection.py) дополнены таблицей/колонкой
+  `testchecks_transcriptionjob.finished_at` — без неё reflect(only=CHANGE_DETECTION_TABLES) падал.
+  `pytest tests/` — 190 passed. Staging-шаг (DoD п.4) не выполнен — ждёт деплоя E14-01/02/03 и
+  реального `TranscriptionJob(DONE)`.

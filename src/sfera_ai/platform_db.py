@@ -21,8 +21,9 @@ CHANGE_DETECTION_TABLES = (
     "testchecks_answer",
     "testchecks_testattempt",
     "headhunter_hhnegotiationrecord",
+    "testchecks_transcriptionjob",
 )
-CANDIDATE_FACTS_TABLES = CHANGE_DETECTION_TABLES + ("testchecks_transcriptionjob",)
+CANDIDATE_FACTS_TABLES = CHANGE_DETECTION_TABLES
 RESUME_DETECTION_TABLES = CANDIDATE_FACTS_TABLES + ("testchecks_question",)
 MERGE_DETECTION_TABLES = ("courses_candidatemergelog",)
 API_READ_TABLES = ("courses_course", "courses_application", "courses_progress")

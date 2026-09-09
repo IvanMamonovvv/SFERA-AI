@@ -38,7 +38,7 @@ def _platform_base(*, application=(7, 100, 5, "2026-08-20T10:00:00"), answers=()
         )
         conn.exec_driver_sql(
             "CREATE TABLE testchecks_transcriptionjob (id INTEGER PRIMARY KEY, answer_id INTEGER, "
-            "status TEXT, transcript_text TEXT, summary_text TEXT)"
+            "status TEXT, transcript_text TEXT, summary_text TEXT, finished_at DATETIME)"
         )
         if application is not None:
             app_id, candidate_id, course_id, modified_at = application

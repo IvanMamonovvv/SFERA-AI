@@ -21,6 +21,7 @@ def compute_current_sources_snapshot(platform_base, profile: CandidateProfile) -
     Answer = platform_base.classes.testchecks_answer
     TestAttempt = platform_base.classes.testchecks_testattempt
     HHNegotiationRecord = platform_base.classes.headhunter_hhnegotiationrecord
+    TranscriptionJob = platform_base.classes.testchecks_transcriptionjob
 
     with PlatformSession(platform_base.engine) as platform_session:
         application = (
@@ -30,6 +31,7 @@ def compute_current_sources_snapshot(platform_base, profile: CandidateProfile) -
         )
         progress_updated_at = None
         max_answer_id = None
+        video_transcript_finished_at = None
         if application is not None:
             progress_updated_at = platform_session.scalar(
                 select(Progress.modified_at).where(
@@ -39,6 +41,12 @@ def compute_current_sources_snapshot(platform_base, profile: CandidateProfile) -
             )
             max_answer_id = platform_session.scalar(
                 select(func.max(Answer.id))
+                .join(TestAttempt, Answer.attempt_id == TestAttempt.id)
+                .where(TestAttempt.candidate_id == application.candidate_id)
+            )
+            video_transcript_finished_at = platform_session.scalar(
+                select(func.max(TranscriptionJob.finished_at))
+                .join(Answer, TranscriptionJob.answer_id == Answer.id)
                 .join(TestAttempt, Answer.attempt_id == TestAttempt.id)
                 .where(TestAttempt.candidate_id == application.candidate_id)
             )
@@ -56,6 +64,10 @@ def compute_current_sources_snapshot(platform_base, profile: CandidateProfile) -
             "max_answer_id": max_answer_id,
             "hh_negotiation_updated_at": _iso(hh_negotiation.modified_at) if hh_negotiation else None,
             "hh_resume_id": hh_negotiation.hh_resume_id if hh_negotiation else None,
+            # E14-10 — готовность видео-транскрипта не меняет ни одно из 5 полей выше
+            # (видео-Answer создаётся один раз при записи, транскрибация асинхронна),
+            # без отдельного поля `needs_profile_rebuild` не заметит DONE-переход.
+            "video_transcript_finished_at": _iso(video_transcript_finished_at),
         }
 
 
