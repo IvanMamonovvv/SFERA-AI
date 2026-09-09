@@ -19,7 +19,7 @@
 | 06 — API карточки кандидата | ⬜ TODO | после 01 |
 | 07 — HR UI | ⬜ TODO | после 06 |
 | 08 — retention guard (30 дней) | ⬜ TODO | после 05 |
-| 09 — тесты/smoke | ⬜ TODO | параллельно с реализацией |
+| 09 — тесты/smoke | ✅ DONE (2026-09-09, автотесты) | ручной smoke заведён в `06_TEST_CHECKLIST.md`, не пройден живым видео |
 | 10 — prod rollout | ⬜ TODO | последний |
 
 **VPS известен и недогружен:** Cloud MSK 80 — 4×3.3 ГГц · 8 ГБ RAM · 80 ГБ NVMe · Ubuntu 24.04.
@@ -38,6 +38,14 @@
 
 ## Журнал
 
+- `2026-09-09` — шаг 09 (тесты и smoke) реализован в `sfera_backend`: новый
+  `testchecks/tests/test_transcription_worker.py` (11 тестов) закрывает единственный
+  реально непокрытый DoD-кусок — сам воркер (`claim_batch`/`reap_stale_jobs`/
+  `_process_job`). Остальные автотест-пункты уже были покрыты шагами 02/06/08. Полный
+  `manage.py test` — 657 passed, 3 skipped. Ручной smoke заведён в
+  `project-context/06_TEST_CHECKLIST.md` (раздел «Видео-транскрибация»), не пройден —
+  нет живого видео/запущенного воркера в этой сессии. Детали — журнал
+  `step-09-tests-smoke.md`.
 - `2026-09-07` — шаг 03 (TranscriptionProvider) реализован в `sfera_backend`:
   `testchecks/services/transcription/base.py` — Protocol + `LocalFasterWhisperProvider`
   (faster-whisper, модель-синглтон, `language=ru`, `WHISPER_MODEL_SIZE=small` из env),
