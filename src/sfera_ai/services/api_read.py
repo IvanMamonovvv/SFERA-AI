@@ -26,6 +26,39 @@ def resolve_course_id(platform_base, course_uuid: str) -> int | None:
         ).scalar_one_or_none()
 
 
+def resolve_company_slug_for_course(platform_base, course_id: int) -> str | None:
+    """company_slug для `HHClient` — платформа мультитенантна (`Course.company_id` ->
+    `Company.slug`), не единое значение из `.env` (найдено архитектурным ревью перед
+    прод-деплоем E16 — единый `HH_BACKEND_COMPANY_SLUG` ломал бы все компании кроме
+    захардкоженной)."""
+    Course = platform_base.classes.courses_course
+    Company = platform_base.classes.companies_company
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.execute(
+            select(Company.slug).join(Course, Course.company_id == Company.id).where(Course.id == course_id)
+        ).scalar_one_or_none()
+
+
+def resolve_company_slug_for_hh_negotiation(platform_base, hh_negotiation_id: int) -> str | None:
+    """Для чистых HH-лидов (ещё не сконвертировавшихся в `Application`) компания
+    резолвится через `HHNegotiationRecord.mapping` -> `VacancyCourseMapping.course` ->
+    `Course.company`. `mapping` может быть `NULL` (лид ещё не привязан к вакансии/курсу)
+    — тогда `None`, вызывающая сторона должна трактовать как resume недоступен."""
+    Negotiation = platform_base.classes.headhunter_hhnegotiationrecord
+    Mapping = platform_base.classes.headhunter_vacancycoursemapping
+    Course = platform_base.classes.courses_course
+    Company = platform_base.classes.companies_company
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.execute(
+            select(Company.slug)
+            .select_from(Negotiation)
+            .join(Mapping, Negotiation.mapping_id == Mapping.id)
+            .join(Course, Mapping.course_id == Course.id)
+            .join(Company, Course.company_id == Company.id)
+            .where(Negotiation.id == hh_negotiation_id)
+        ).scalar_one_or_none()
+
+
 def get_summary(session: Session, course_id: int) -> dict[str, int]:
     """03_TDD.md, «3. API / контракты» — агрегат по AIProcessingJob.status +
     CandidateVacancyAnalysis наличие для course. total — кандидаты, хоть раз затронутые

@@ -12,13 +12,12 @@ class HHClient:
     docker-сеть `ai_shared`."""
 
     def __init__(
-        self, *, base_url: str, login: str, password: str, company_slug: str,
+        self, *, base_url: str, login: str, password: str,
         host_header: str | None = None, http_client: httpx.Client | None = None,
     ):
         self._base_url = base_url.rstrip("/")
         self._login = login
         self._password = password
-        self._company_slug = company_slug
         self._host_header = host_header
         self._http = http_client or httpx.Client(timeout=30.0)
         self._access_token: str | None = None
@@ -48,9 +47,9 @@ class HHClient:
             response = self._http.get(url, headers=self._headers({"Authorization": f"Bearer {self._access_token}"}))
         return response
 
-    def get_resume_pdf(self, hh_negotiation_id: int) -> bytes:
+    def get_resume_pdf(self, hh_negotiation_id: int, company_slug: str) -> bytes:
         url = (
-            f"{self._base_url}/api/v1/companies/{self._company_slug}"
+            f"{self._base_url}/api/v1/companies/{company_slug}"
             f"/integrations/hh/negotiations/{hh_negotiation_id}/resume.pdf/"
         )
         try:

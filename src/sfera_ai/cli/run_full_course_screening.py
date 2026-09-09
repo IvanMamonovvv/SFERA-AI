@@ -162,7 +162,6 @@ def main() -> None:
         base_url=settings.hh_backend_base_url,
         login=settings.hh_backend_admin_login,
         password=settings.hh_backend_admin_password,
-        company_slug=settings.hh_backend_company_slug,
         host_header=settings.hh_backend_host_header,
     )
     s3_client = boto3.client(

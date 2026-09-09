@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     hh_backend_base_url: str
     hh_backend_admin_login: str
     hh_backend_admin_password: str
-    hh_backend_company_slug: str
     # ALLOWED_HOSTS backend'а не включает внутреннее docker DNS-имя `backend` — только
     # публичные домены/IP. Ходим по внутренней сети (быстрее, в обход gateway), но с
     # Host-заголовком, который backend примет (найдено на реальном прогоне 2026-08-27).

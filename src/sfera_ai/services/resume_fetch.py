@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.integrations.hh_client import HHClient, HHClientError
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
+from sfera_ai.services.api_read import resolve_company_slug_for_hh_negotiation
 
 PLATFORM_ANSWER_TABLE = "testchecks_answer"
 
@@ -24,14 +25,19 @@ def _fetch_anketa_file(extract: ResumeExtract, *, platform_base, s3_client, s3_b
         raise ResumeFetchError(f"S3 get_object failed for key={answer.file}: {exc}") from exc
 
 
-def _fetch_hh_resume(extract: ResumeExtract, *, session: Session, hh_client: HHClient) -> bytes:
+def _fetch_hh_resume(extract: ResumeExtract, *, session: Session, platform_base, hh_client: HHClient) -> bytes:
     profile = session.get(CandidateProfile, extract.candidate_profile_id)
     if profile is None or profile.hh_negotiation_id is None:
         raise ResumeFetchError(
             f"candidate_profile_id={extract.candidate_profile_id} без hh_negotiation_id"
         )
+    company_slug = resolve_company_slug_for_hh_negotiation(platform_base, profile.hh_negotiation_id)
+    if company_slug is None:
+        raise ResumeFetchError(
+            f"hh_negotiation_id={profile.hh_negotiation_id} без company (mapping не назначен)"
+        )
     try:
-        return hh_client.get_resume_pdf(profile.hh_negotiation_id)
+        return hh_client.get_resume_pdf(profile.hh_negotiation_id, company_slug)
     except HHClientError as exc:
         raise ResumeFetchError(str(exc)) from exc
 
@@ -53,7 +59,7 @@ def fetch_resume_bytes(
         if extract.source_type == "ANKETA_FILE":
             return _fetch_anketa_file(extract, platform_base=platform_base, s3_client=s3_client, s3_bucket=s3_bucket)
         if extract.source_type == "HH_RESUME":
-            return _fetch_hh_resume(extract, session=session, hh_client=hh_client)
+            return _fetch_hh_resume(extract, session=session, platform_base=platform_base, hh_client=hh_client)
         raise ResumeFetchError(f"неизвестный source_type: {extract.source_type}")
     except ResumeFetchError as exc:
         extract.status = "FAILED"

@@ -11,6 +11,30 @@ from sfera_ai.services.resume_pipeline import find_anketa_resume_answer_id, proc
 _PDF_BYTES = b"%PDF-1.4 fake resume bytes"
 
 
+def _hh_platform_base(negotiation_id: int = 42):
+    from sqlalchemy import create_engine
+
+    from sfera_ai.platform_db import HH_RESUME_COMPANY_TABLES, reflect_platform_tables
+
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, slug TEXT)")
+        conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, company_id INTEGER)")
+        conn.exec_driver_sql(
+            "CREATE TABLE headhunter_vacancycoursemapping (id INTEGER PRIMARY KEY, course_id INTEGER)"
+        )
+        conn.exec_driver_sql(
+            "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, mapping_id INTEGER)"
+        )
+        conn.exec_driver_sql("INSERT INTO companies_company (id, slug) VALUES (1, 'acme')")
+        conn.exec_driver_sql("INSERT INTO courses_course (id, company_id) VALUES (1, 1)")
+        conn.exec_driver_sql("INSERT INTO headhunter_vacancycoursemapping (id, course_id) VALUES (1, 1)")
+        conn.exec_driver_sql(
+            f"INSERT INTO headhunter_hhnegotiationrecord (id, mapping_id) VALUES ({negotiation_id}, 1)"
+        )
+    return reflect_platform_tables(engine, tables=HH_RESUME_COMPANY_TABLES)
+
+
 def _llm_client():
     llm_client = MagicMock()
     llm_client.complete.return_value = LLMResult(
@@ -40,7 +64,7 @@ def test_hh_resume_end_to_end_marks_done(tmp_engine, monkeypatch):
         session.commit()
 
         extract = process_resume(
-            session=session, platform_base=MagicMock(), hh_client=hh_client,
+            session=session, platform_base=_hh_platform_base(), hh_client=hh_client,
             s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client,
             candidate_profile_id=profile.id, hh_resume_id="hh-1",
         )
@@ -67,12 +91,12 @@ def test_repeated_call_on_done_extract_makes_no_new_http_or_llm_calls(tmp_engine
         session.commit()
 
         first = process_resume(
-            session=session, platform_base=MagicMock(), hh_client=hh_client,
+            session=session, platform_base=_hh_platform_base(), hh_client=hh_client,
             s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client,
             candidate_profile_id=profile.id, hh_resume_id="hh-1",
         )
         second = process_resume(
-            session=session, platform_base=MagicMock(), hh_client=hh_client,
+            session=session, platform_base=_hh_platform_base(), hh_client=hh_client,
             s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client,
             candidate_profile_id=profile.id, hh_resume_id="hh-1",
         )
@@ -97,7 +121,7 @@ def test_fetch_failure_returns_failed_extract_without_calling_llm(tmp_engine):
         session.commit()
 
         extract = process_resume(
-            session=session, platform_base=MagicMock(), hh_client=hh_client,
+            session=session, platform_base=_hh_platform_base(), hh_client=hh_client,
             s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client,
             candidate_profile_id=profile.id, hh_resume_id="hh-1",
         )
@@ -119,7 +143,7 @@ def test_unrecognized_file_bytes_marks_failed_without_calling_llm(tmp_engine):
         session.commit()
 
         extract = process_resume(
-            session=session, platform_base=MagicMock(), hh_client=hh_client,
+            session=session, platform_base=_hh_platform_base(), hh_client=hh_client,
             s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client,
             candidate_profile_id=profile.id, hh_resume_id="hh-1",
         )

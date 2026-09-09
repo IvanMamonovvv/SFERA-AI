@@ -24,6 +24,17 @@ CHANGE_DETECTION_TABLES = (
     "testchecks_transcriptionjob",
 )
 CANDIDATE_FACTS_TABLES = CHANGE_DETECTION_TABLES
-RESUME_DETECTION_TABLES = CANDIDATE_FACTS_TABLES + ("testchecks_question",)
+RESUME_DETECTION_TABLES = CANDIDATE_FACTS_TABLES + (
+    "testchecks_question", "courses_course", "companies_company", "headhunter_vacancycoursemapping",
+)
 MERGE_DETECTION_TABLES = ("courses_candidatemergelog",)
-API_READ_TABLES = ("courses_course", "courses_application", "courses_progress")
+API_READ_TABLES = (
+    "courses_course", "courses_application", "courses_progress", "companies_company",
+    "headhunter_hhnegotiationrecord", "headhunter_vacancycoursemapping",
+)
+HH_RESUME_COMPANY_TABLES = (
+    "headhunter_hhnegotiationrecord",
+    "headhunter_vacancycoursemapping",
+    "courses_course",
+    "companies_company",
+)

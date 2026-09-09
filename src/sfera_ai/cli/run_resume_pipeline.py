@@ -5,10 +5,13 @@ import boto3
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from sqlalchemy import create_engine
+
 from sfera_ai.config import Settings
 from sfera_ai.db.session import make_write_engine
 from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.models.candidate_profile import CandidateProfile
+from sfera_ai.platform_db import HH_RESUME_COMPANY_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.resume_pipeline import process_resume
 
@@ -25,12 +28,13 @@ def main() -> None:
 
     settings = Settings()
     write_engine = make_write_engine(settings)
+    platform_engine = create_engine(settings.platform_database_url)
+    platform_base = reflect_platform_tables(platform_engine, tables=HH_RESUME_COMPANY_TABLES)
 
     hh_client = HHClient(
         base_url=settings.hh_backend_base_url,
         login=settings.hh_backend_admin_login,
         password=settings.hh_backend_admin_password,
-        company_slug=settings.hh_backend_company_slug,
         host_header=settings.hh_backend_host_header,
     )
     s3_client = boto3.client(
@@ -55,7 +59,7 @@ def main() -> None:
         for profile in profiles:
             extract = process_resume(
                 session=session,
-                platform_base=None,  # HH_RESUME источник не читает testchecks_answer
+                platform_base=platform_base,
                 hh_client=hh_client,
                 s3_client=s3_client,
                 s3_bucket=settings.s3_bucket,

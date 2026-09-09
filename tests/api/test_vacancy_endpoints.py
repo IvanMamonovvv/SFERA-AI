@@ -41,6 +41,10 @@ def _platform_engine(application_count: int = 0):
         conn.exec_driver_sql(
             "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, application_id INTEGER)"
         )
+        conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, slug TEXT)")
+        conn.exec_driver_sql(
+            "CREATE TABLE headhunter_vacancycoursemapping (id INTEGER PRIMARY KEY, course_id INTEGER)"
+        )
     return engine
 
 

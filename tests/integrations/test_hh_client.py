@@ -10,7 +10,6 @@ def _client(handler) -> HHClient:
         base_url="http://backend:8000",
         login="admin@example.com",
         password="secret",
-        company_slug="acme",
         http_client=httpx.Client(transport=transport),
     )
 
@@ -27,7 +26,7 @@ def test_get_resume_pdf_authenticates_then_fetches():
         return httpx.Response(200, content=b"%PDF-1")
 
     client = _client(handler)
-    result = client.get_resume_pdf(42)
+    result = client.get_resume_pdf(42, "acme")
 
     assert result == b"%PDF-1"
     assert calls == ["/api/v1/auth/token/", "/api/v1/companies/acme/integrations/hh/negotiations/42/resume.pdf/"]
@@ -46,7 +45,7 @@ def test_get_resume_pdf_reauthenticates_on_401():
         return httpx.Response(200, content=b"%PDF-2")
 
     client = _client(handler)
-    result = client.get_resume_pdf(42)
+    result = client.get_resume_pdf(42, "acme")
 
     assert result == b"%PDF-2"
     assert call_count == {"auth": 2, "pdf": 2}
@@ -60,7 +59,7 @@ def test_get_resume_pdf_404_raises_hh_client_error():
 
     client = _client(handler)
     with pytest.raises(HHClientError, match="404"):
-        client.get_resume_pdf(42)
+        client.get_resume_pdf(42, "acme")
 
 
 def test_authentication_failure_raises_hh_client_error():
@@ -69,7 +68,7 @@ def test_authentication_failure_raises_hh_client_error():
 
     client = _client(handler)
     with pytest.raises(HHClientError, match="auth failed"):
-        client.get_resume_pdf(42)
+        client.get_resume_pdf(42, "acme")
 
 
 def test_network_error_raises_hh_client_error():
@@ -80,4 +79,4 @@ def test_network_error_raises_hh_client_error():
 
     client = _client(handler)
     with pytest.raises(HHClientError, match="backend request failed"):
-        client.get_resume_pdf(42)
+        client.get_resume_pdf(42, "acme")
