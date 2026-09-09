@@ -16,9 +16,12 @@
 TRANSCRIBE_PROVIDER=local            # local | yandex | proxy  (рубильник)
 WHISPER_MODEL_SIZE=small             # из step-00
 TRANSCRIBE_CONCURRENCY=2             # из step-00
-SUMMARY_PROVIDER=proxy               # решено 2026-09-07: gpt-4o-mini через proxyapi/vsegpt
-SUMMARY_MODEL=gpt-4o-mini
-PROXY_API_KEY=...
+SUMMARY_PROVIDER=proxy               # решено 2026-09-09: боевого ключа proxyapi нет,
+                                      # используем OpenRouter (OpenAI-совместимый REST,
+                                      # ProxyLLMProvider переиспользуется как есть)
+SUMMARY_MODEL=openai/gpt-4o-mini     # id модели в неймспейсе OpenRouter
+PROXY_API_BASE=https://openrouter.ai/api/v1
+PROXY_API_KEY=...                    # значение — OPENROUTER_API_KEY
 TRANSCRIBE_MAX_ATTEMPTS=3
 ```
 
