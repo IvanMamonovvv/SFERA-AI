@@ -28,6 +28,7 @@
 | E13 | Приоритет источников (резюме > ответы > видео) + видимость «нет резюме» | E6, E9, E10 | низкий-средний (меняет промпт fit-scoring, версия промпта) |
 | E14 | Реализация видео-транскрибации в `sfera_backend` (внешний код, трекинг из SFERA-AI) | E4 | требует явного разрешения владельца на каждый шаг — другой репозиторий |
 | E15 | «Обработка кандидатов» — модалка HR-скрининга по портрету вакансии (SFERA-AI + `sfera_backend` + `SPHERA`) | E6, E8, E9 | часть шагов в других репозиториях — явное разрешение на каждый |
+| E16 | Деплой сервиса на VPS — ai-scheduler отдельным процессом (был не задеплоен), deploy-скрипт по образцу backend/frontend | E0 | нулевой (только SFERA-AI, инфра) |
 
 ## Разбивка на шаги
 
@@ -348,6 +349,20 @@ step-NN-*.md`; шаги ниже — только краткая карта + я
   одиночный/массовый), вызывает только проксирующие endpoint'ы блока B, не SFERA-AI
   напрямую.
 
+### E16 — Деплой сервиса на VPS
+
+Найдено 2026-09-09 при обсуждении прод-релиза E15: `docker-compose.yml`/`Dockerfile`
+поднимали только `ai-service` (FastAPI/uvicorn) — `scheduler.py` (тик очереди
+`AIProcessingJob` раз в 30 минут) нигде не был подключён к деплою, реальные AI-вызовы
+без него не начнутся никогда, даже при `ai_processing_dry_run=False`. Один эпик, весь
+код — SFERA-AI (без ограничений на разрешение).
+
+- [x] `epics/E16-service-deployment/step-E16-01-scheduler-compose-service.md` — `ai-scheduler`
+  отдельным сервисом в `docker-compose.yml`, инвариант «ровно один инстанс».
+- [x] `epics/E16-service-deployment/step-E16-02-deploy-script.md` — `scripts/deploy-ai-service.sh`
+  по образцу `deploy-backend.sh`/`deploy-frontend.sh` (git pull main → build → migrate → healthcheck).
+- [x] `epics/E16-service-deployment/step-E16-03-deployment-doc.md` — `docs/DEPLOYMENT.md`.
+
 ## Граф зависимостей
 
 E0 → E1, E2, E4
@@ -364,3 +379,4 @@ E9 → E12
 E6, E9, E10 → E13
 E4 → E14 (реализация в sfera_backend, каждый шаг — отдельное разрешение владельца)
 E6, E8, E9 → E15 (шаги в sfera_backend/SPHERA — отдельное разрешение владельца на каждый)
+E0 → E16 (деплой самого сервиса, весь код в SFERA-AI)

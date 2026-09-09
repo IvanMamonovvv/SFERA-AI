@@ -2,6 +2,21 @@ services:
   ai-service:
     build: .
     env_file: .env
+    restart: unless-stopped
+    networks:
+      - ai_shared
+
+  # E16-01 — тик очереди (AIProcessingJob) отдельным процессом. РОВНО один
+  # экземпляр: build_scheduler() (scheduler.py) — единственная точка запуска
+  # APScheduler во всём сервисе (не дублировать в api/app.py lifespan). Никогда
+  # не `docker compose up --scale ai-scheduler=N>1` — два процесса тикают по
+  # своим таймерам параллельно, платный LLM-вызов может задвоиться на реальном
+  # AI-бюджете (docs/DEPLOYMENT.md, «Единственный инстанс планировщика»).
+  ai-scheduler:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    command: ["uv", "run", "python", "-m", "sfera_ai.scheduler"]
     networks:
       - ai_shared
 
