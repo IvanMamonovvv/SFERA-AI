@@ -4,7 +4,23 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — полный аудит логики эпика E14
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-01** (модель
+`CandidateVacancyTransfer`, свой репозиторий SFERA-AI, без ограничений) выполнен.
+Таблица `ai_candidate_vacancy_transfer` (FK CASCADE на `ai_candidate_profile`,
+уникальный `(candidate_profile_id, course_id)`), Alembic-ревизия `0008`, upsert-сервис
+`mark_candidate_transferred` (`services/candidate_transfer.py`) — обновляет
+`transferred_at` при повторном вызове, не дублирует строку. Тесты модели+сервиса
+зелёные, весь `uv run pytest` — 194 passed. Upgrade/downgrade миграции 0008 проверен
+на временной SQLite. `alembic upgrade head` дополнительно применён на staging (ручной
+двухпрыжковый тоннель `ssh sfera`, порт 44122 — обнаружено, что
+`scripts/tunnel-platform-db.sh` ходит по устаревшему порту 22 из `.env`, не
+почищено) — `alembic current` на staging подтверждает `0008 (head)`. Заодно
+задокументирован прямой SSH-доступ к VPS (`docs/LOCAL_DEV.md`, новый раздел
+«SSH-доступ к VPS») — алиас `sfera` (root, порт 44122), структура `/var/www/`
+(backend SFERA в `/var/www/sphera-backend`, рядом другие несвязанные сервисы).
+Детали — журнал `step-E15-01-transfer-model.md`.
+
+`2026-09-09` (предыдущее) — полный аудит логики эпика E14
 (`plan-auditor`) нашёл race condition: retention guard (`clean_expired_videos`/
 `check_disk_pressure`, `sfera_backend/core/scheduler.py`) мог гоняться с воркером
 (`_process_job`) за один и тот же `TranscriptionJob` на границе 30-дневного лимита —
@@ -436,7 +452,8 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-08 | Тесты и smoke воркера транскрибации, код в `sfera_backend` (`step-E14-08-tests-smoke.md`) | DONE (автотесты; ручной smoke заведён, не пройден живым видео) | 2026-09-09 |
 | E14-09 | Prod rollout, код в `sfera_backend` (`step-E14-09-prod-rollout.md`) | DONE | 2026-09-09 |
 | E14-10 | Change detection на видео-транскрипт (`SFERA-AI`, свой репозиторий) (`step-E14-10-change-detection-video.md`) | DONE (код+тесты; staging-проверка на реальном TranscriptionJob(DONE) — отдельно) | 2026-09-09 |
-| E15-01…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
+| E15-01 | Модель `CandidateVacancyTransfer` + upsert-сервис (`step-E15-01-transfer-model.md`) | DONE | 2026-09-09 |
+| E15-02…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 

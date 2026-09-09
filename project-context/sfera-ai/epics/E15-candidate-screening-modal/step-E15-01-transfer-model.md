@@ -1,6 +1,6 @@
 # Шаг E15-01 — Модель `CandidateVacancyTransfer`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (SFERA-AI) · **Зависит от:** —
 **Перед началом:** прочитай `docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md`
 (разделы «Данные», «Edge cases»).
@@ -48,4 +48,15 @@ uv run pytest tests/models/test_candidate_vacancy_transfer.py
 
 ## Журнал
 
-- (не начато)
+- 2026-09-09: модель `CandidateVacancyTransfer` (`ai_candidate_vacancy_transfer`,
+  FK CASCADE на `ai_candidate_profile`, уникальный индекс `(candidate_profile_id,
+  course_id)`), Alembic-ревизия `0008`, upsert-сервис
+  `mark_candidate_transferred` (`services/candidate_transfer.py`). Тесты модели +
+  сервиса (уникальный индекс, повторный upsert обновляет `transferred_at`, не
+  дублирует строку) — зелёные, весь сьют `uv run pytest` — 194 passed. Upgrade/
+  downgrade миграции 0008 проверен на временной SQLite-базе. `alembic upgrade head`
+  применён на staging (ручной двухпрыжковый тоннель через `ssh sfera`, порт 44122 —
+  `scripts/tunnel-platform-db.sh` использует устаревший порт 22 в `.env`, не чинил
+  в рамках этого шага): `0007 -> 0008, ai_candidate_vacancy_transfer`, `alembic
+  current` подтверждает `0008 (head)`. Proxy-контейнер и локальный тоннель убраны
+  после проверки.
