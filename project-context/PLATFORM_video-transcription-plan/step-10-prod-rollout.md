@@ -1,6 +1,6 @@
 # Step 10 — Prod rollout
 
-**Статус:** ⬜ TODO
+**Статус:** ✅ DONE (2026-09-09)
 **Зависит от:** step-01…09.
 **Цель:** безопасно выкатить на VPS (см. `project-context/09_BACKEND_DEPLOY.md`).
 
@@ -53,4 +53,7 @@ TRANSCRIBE_MAX_ATTEMPTS=3
 - [ ] Есть способ выключить фичу одним env/остановкой контейнера.
 
 ## Журнал
-- (пусто)
+- `2026-09-09` — раскатано на прод (VPS Timeweb). Детали, включая живой прогон
+  на реальном видео и env — `SFERA-AI/project-context/sfera-ai/epics/
+  E14-video-transcription-worker/step-E14-09-prod-rollout.md`. Сервис
+  `PROXY_API_BASE`/секрет назван `OPENROUTER_API_KEY` (не `PROXY_API_KEY`).
