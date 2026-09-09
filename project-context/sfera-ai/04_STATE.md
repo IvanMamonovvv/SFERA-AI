@@ -4,7 +4,21 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-01** (модель
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-02**
+(`enqueue_full_screening_for_course`, свой репозиторий SFERA-AI, без ограничений)
+выполнен. Новая функция в `services/job_detection.py` ставит `AIProcessingJob` на всех
+кандидатов курса (включая не анализированных ранее), reason `BACKFILL`, дедуп через
+`_create_job_if_absent`. Защита от гонки при двойном «Сохранить» — вариант с
+DB-constraint (не guard на стороне `FullSphera`-эндпоинта — тот в другом репозитории,
+правки требуют отдельного разрешения, см. E15-04/06). Partial unique index
+`(candidate_profile_id, course_id, reason) WHERE status IN ('PENDING','PROCESSING')`
+уже был в БД с миграции 0004, но отсутствовал в `AIProcessingJob.__table_args__` —
+добавлен в модель (новой Alembic-миграции не требуется, БД не менялась). `_create_job_if_absent`
+теперь ловит `IntegrityError` на commit как no-op. Тесты (в т.ч. с реальной гонкой двух
+потоков/`Session` на файловой SQLite) зелёные, весь `uv run pytest` — 197 passed.
+Детали — журнал `step-E15-02-enqueue-full-screening.md`.
+
+`2026-09-09` (предыдущее) — шаг **E15-01** (модель
 `CandidateVacancyTransfer`, свой репозиторий SFERA-AI, без ограничений) выполнен.
 Таблица `ai_candidate_vacancy_transfer` (FK CASCADE на `ai_candidate_profile`,
 уникальный `(candidate_profile_id, course_id)`), Alembic-ревизия `0008`, upsert-сервис
@@ -453,7 +467,8 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-09 | Prod rollout, код в `sfera_backend` (`step-E14-09-prod-rollout.md`) | DONE | 2026-09-09 |
 | E14-10 | Change detection на видео-транскрипт (`SFERA-AI`, свой репозиторий) (`step-E14-10-change-detection-video.md`) | DONE (код+тесты; staging-проверка на реальном TranscriptionJob(DONE) — отдельно) | 2026-09-09 |
 | E15-01 | Модель `CandidateVacancyTransfer` + upsert-сервис (`step-E15-01-transfer-model.md`) | DONE | 2026-09-09 |
-| E15-02…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
+| E15-02 | `enqueue_full_screening_for_course` (`step-E15-02-enqueue-full-screening.md`) | DONE | 2026-09-09 |
+| E15-03…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
