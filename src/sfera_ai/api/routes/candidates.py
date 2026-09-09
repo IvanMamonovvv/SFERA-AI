@@ -3,7 +3,13 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from sfera_ai.api.deps import get_platform_engine, get_session, resolve_course_or_404
-from sfera_ai.services.api_read import get_candidate_detail, get_candidate_history, get_summary, list_candidates
+from sfera_ai.services.api_read import (
+    get_candidate_detail,
+    get_candidate_history,
+    get_summary,
+    list_candidates,
+    list_screening_candidates,
+)
 from sfera_ai.services.job_detection import ReanalyzeRateLimitedError, enqueue_manual_reanalyze
 
 router = APIRouter()
@@ -29,6 +35,16 @@ def get_candidates(
 ) -> dict:
     course_id, platform_base = resolve_course_or_404(platform_engine, course_uuid)
     return list_candidates(session, platform_base, course_id, limit=limit, offset=offset)
+
+
+@router.get("/candidates/screening/")
+def get_screening_candidates(
+    course_uuid: str,
+    session: Session = Depends(get_session),
+    platform_engine: Engine = Depends(get_platform_engine),
+) -> dict:
+    course_id, platform_base = resolve_course_or_404(platform_engine, course_uuid)
+    return list_screening_candidates(session, platform_base, course_id)
 
 
 @router.get("/candidates/{candidate_profile_id}/")

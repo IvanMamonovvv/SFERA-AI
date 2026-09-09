@@ -4,19 +4,29 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-02**
-(`enqueue_full_screening_for_course`, свой репозиторий SFERA-AI, без ограничений)
-выполнен. Новая функция в `services/job_detection.py` ставит `AIProcessingJob` на всех
-кандидатов курса (включая не анализированных ранее), reason `BACKFILL`, дедуп через
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-03**
+(`GET .../candidates/screening/`, свой репозиторий SFERA-AI, без ограничений) выполнен.
+Новая функция `list_screening_candidates` в `services/api_read.py` — кандидаты курса
+с `fit_score >= 60`, сортировка по убыванию `fit_score`, поля как в существующем
+`candidates/` + `transferred: bool` (join на `CandidateVacancyTransfer`, E15-01). Роут
+`/candidates/screening/` в `api/routes/candidates.py` объявлен ДО
+`/candidates/{candidate_profile_id}/` — иначе FastAPI матчит `screening` как id.
+`floor(fit_score/10)` из design doc — вопрос отображения на фронте, не контракта этого
+эндпоинта, не реализовывался здесь. Тесты в `tests/api/test_candidates_list.py`
+(пустой курс, фильтр+сортировка+`transferred`, 404 неизвестный курс), весь
+`uv run pytest` — 200 passed. Детали — журнал `step-E15-03-screening-endpoint.md`.
+
+Предыдущий шаг: **E15-02** (`enqueue_full_screening_for_course`) выполнен — новая
+функция в `services/job_detection.py` ставит `AIProcessingJob` на всех кандидатов
+курса (включая не анализированных ранее), reason `BACKFILL`, дедуп через
 `_create_job_if_absent`. Защита от гонки при двойном «Сохранить» — вариант с
 DB-constraint (не guard на стороне `FullSphera`-эндпоинта — тот в другом репозитории,
 правки требуют отдельного разрешения, см. E15-04/06). Partial unique index
 `(candidate_profile_id, course_id, reason) WHERE status IN ('PENDING','PROCESSING')`
 уже был в БД с миграции 0004, но отсутствовал в `AIProcessingJob.__table_args__` —
 добавлен в модель (новой Alembic-миграции не требуется, БД не менялась). `_create_job_if_absent`
-теперь ловит `IntegrityError` на commit как no-op. Тесты (в т.ч. с реальной гонкой двух
-потоков/`Session` на файловой SQLite) зелёные, весь `uv run pytest` — 197 passed.
-Детали — журнал `step-E15-02-enqueue-full-screening.md`.
+теперь ловит `IntegrityError` на commit как no-op. Детали — журнал
+`step-E15-02-enqueue-full-screening.md`.
 
 `2026-09-09` (предыдущее) — шаг **E15-01** (модель
 `CandidateVacancyTransfer`, свой репозиторий SFERA-AI, без ограничений) выполнен.
