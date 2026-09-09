@@ -6,6 +6,8 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-install-project --no-dev
 
 COPY src ./src
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN uv sync --frozen --no-dev
 
 # step-E8-01-framework-scaffold.md — реальный entrypoint: FastAPI-приложение через
