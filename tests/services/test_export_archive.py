@@ -3,12 +3,13 @@ from datetime import datetime, timezone
 from io import BytesIO
 from unittest.mock import MagicMock
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from sfera_ai.db.base import Base
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
+from sfera_ai.models.candidate_vacancy_transfer import CandidateVacancyTransfer
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.platform_db import reflect_platform_tables
@@ -149,3 +150,65 @@ def test_archive_multiple_candidates_get_separate_folders(tmp_engine):
         names = archive.namelist()
         assert any(name.startswith(f"candidate_{first_id}/") for name in names)
         assert any(name.startswith(f"candidate_{second_id}/") for name in names)
+
+
+def _transferred_ids(session: Session, course_id: int) -> set[int]:
+    return set(
+        session.scalars(
+            select(CandidateVacancyTransfer.candidate_profile_id).where(
+                CandidateVacancyTransfer.course_id == course_id
+            )
+        ).all()
+    )
+
+
+def test_export_marks_transfer_only_for_candidate_with_card(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100)
+
+    with Session(tmp_engine) as session:
+        candidate_profile_id = _seed_candidate_with_analysis(session, application_id=7)
+
+        build_candidates_export_archive(
+            session, platform_base, [candidate_profile_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=MagicMock(), s3_bucket="bucket",
+        )
+
+        assert _transferred_ids(session, COURSE_ID) == {candidate_profile_id}
+
+
+def test_export_does_not_mark_transfer_for_candidate_without_card(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100)
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=7, facts=[])
+        session.add(profile)
+        session.commit()
+        candidate_profile_id = profile.id
+
+        build_candidates_export_archive(
+            session, platform_base, [candidate_profile_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=MagicMock(), s3_bucket="bucket",
+        )
+
+        assert _transferred_ids(session, COURSE_ID) == set()
+
+
+def test_export_mixed_request_marks_only_candidate_with_card(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100)
+
+    with Session(tmp_engine) as session:
+        with_card_id = _seed_candidate_with_analysis(session, application_id=7)
+        without_card = CandidateProfile(application_id=8, facts=[])
+        session.add(without_card)
+        session.commit()
+        without_card_id = without_card.id
+
+        build_candidates_export_archive(
+            session, platform_base, [with_card_id, without_card_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=MagicMock(), s3_bucket="bucket",
+        )
+
+        assert _transferred_ids(session, COURSE_ID) == {with_card_id}

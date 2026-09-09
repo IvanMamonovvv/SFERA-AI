@@ -4,23 +4,31 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-04**
-(`POST vacancy-profile/` запускает полный скрининг курса) выполнен. `create_vacancy_profile`
-(`api/routes/vacancy.py`) после сохранения новой версии портрета запускает
-`enqueue_full_screening_for_course` в отдельном `threading.Thread` — не FastAPI
-`BackgroundTasks` (те выполняются до отправки ответа ASGI-клиенту, эффективно блокируя
-его так же, как прямой вызов в теле запроса — под `TestClient` DoD-тест на неблокирующий
-ответ иначе не верифицируем). Фоновая функция открывает свою `Session`
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-05**
+(экспорт проставляет `CandidateVacancyTransfer`) выполнен. `build_candidates_export_archive`
+(`services/export/archive.py`) вызывает `mark_candidate_transferred` (E15-01) сразу после
+успешного `render_ai_card_pdf` для кандидата — до сбора resume/video, т.к. transfer не
+зависит от их наличия. Кандидаты без текущего анализа (`render_ai_card_pdf` вернул `None`)
+не помечаются, `manifest.txt`-поведение не изменилось. Тесты в
+`tests/services/test_export_archive.py` (карта есть → transfer создан; карты нет → не
+создан; смешанный запрос → помечен только кандидат с картой). `uv run pytest` — 205 passed.
+Детали — журнал `step-E15-05-export-transfer-mark.md`.
+
+Предыдущий шаг: **E15-04** (`POST vacancy-profile/` запускает полный скрининг курса)
+выполнен. `create_vacancy_profile` (`api/routes/vacancy.py`) после сохранения новой версии
+портрета запускает `enqueue_full_screening_for_course` в отдельном `threading.Thread` — не
+FastAPI `BackgroundTasks` (те выполняются до отправки ответа ASGI-клиенту, эффективно
+блокируя его так же, как прямой вызов в теле запроса — под `TestClient` DoD-тест на
+неблокирующий ответ иначе не верифицируем). Фоновая функция открывает свою `Session`
 (`sessionmaker(bind=app.state.engine)`) и свой `platform_base`
 (`reflect_platform_tables(..., tables=IDENTITY_RESOLVER_TABLES)` — `courses_application` +
 `headhunter_hhnegotiationrecord`, минимум для `resolve_or_create_candidate_profile`), т.к.
 request-scoped ресурсы закрываются сразу после ответа. Тесты в
 `tests/api/test_vacancy_endpoints.py` — джобы реально ставятся в фоне (poll с таймаутом),
 мок задержки в `enqueue_full_screening_for_course` подтверждает что ответ `POST` не
-блокируется. `uv run pytest` — 202 passed. Детали — журнал
-`step-E15-04-vacancy-profile-trigger.md`.
+блокируется. Детали — журнал `step-E15-04-vacancy-profile-trigger.md`.
 
-Предыдущий шаг: **E15-03** (`GET .../candidates/screening/`) выполнен. Новая функция
+Ранее: **E15-03** (`GET .../candidates/screening/`) выполнен. Новая функция
 `list_screening_candidates` в `services/api_read.py` — кандидаты курса с `fit_score >= 60`,
 сортировка по убыванию `fit_score`, поля как в существующем `candidates/` +
 `transferred: bool` (join на `CandidateVacancyTransfer`, E15-01). Роут

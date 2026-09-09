@@ -4,6 +4,7 @@ from io import BytesIO
 
 from sqlalchemy.orm import Session
 
+from sfera_ai.services.candidate_transfer import mark_candidate_transferred
 from sfera_ai.services.export.ai_card import candidate_display_name, render_ai_card_pdf
 from sfera_ai.services.export.files import collect_export_files
 
@@ -43,7 +44,8 @@ def build_candidates_export_archive(
     """step-E9-03 — zip на несколько кандидатов, выбранных в UI: одна подпапка на
     кандидата (`card.pdf`/`resume.<ext>`/`video.mp4`), формат согласован с владельцем
     2026-08-31. Недоступные файлы не блокируют экспорт остальных — фиксируются в
-    `manifest.txt` подпапки."""
+    `manifest.txt` подпапки. step-E15-05 — «передан» (`CandidateVacancyTransfer`)
+    помечается только кандидат, у которого реально собрался `card.pdf`."""
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for candidate_profile_id in candidate_profile_ids:
@@ -54,6 +56,7 @@ def build_candidates_export_archive(
             pdf = render_ai_card_pdf(session, candidate_profile_id, course_id)
             if pdf is not None:
                 archive.writestr(f"{folder}/card.pdf", pdf)
+                mark_candidate_transferred(session, candidate_profile_id=candidate_profile_id, course_id=course_id)
             else:
                 unavailable.append("card.pdf: недоступно (нет текущего анализа)")
 
