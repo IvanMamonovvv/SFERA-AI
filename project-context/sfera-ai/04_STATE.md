@@ -4,7 +4,29 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` — шаг **E14-07** (retention guard, код в
+**Последнее обновление:** `2026-09-09` — шаг **E14-08** (тесты и smoke воркера
+транскрибации, код в `sfera_backend`) реализован по явному разрешению владельца. Новый
+`testchecks/tests/test_transcription_worker.py` (11 тестов) закрывает единственный
+реально непокрытый кусок DoD (по прямой заметке на E14-04: тестов на сам
+`run_transcription_worker.py` не было) — `claim_batch` (взятие в работу, второй «воркер»
+не перезабирает уже PROCESSING), `reap_stale_jobs` (зависший джоб → PENDING, после
+лимита попыток → FAILED), `_process_job` (провайдер → DONE с заполненными полями; пустое
+видео → `is_empty=True` без вызова LLM; сбой провайдера → attempts++/retry, после MAX →
+FAILED, воркер не падает). Остальные DoD-пункты плана (создание джобы, API-поле,
+retention guard не трогает транскрипт) уже были закрыты шагами E14-01/05/07 — не
+дублировались. Найдено попутно: `claim_batch`/`reap_stale_jobs` используют
+`select_for_update(skip_locked=True)`, тестовая БД — sqlite
+(`has_select_for_update=False`), но вызовы в тестах не падают (Django на sqlite тихо
+игнорирует локировку) — настоящая multi-connection гонка проверяется только на
+PostgreSQL (прод/staging), не в этом тестовом прогоне. Полный `manage.py test` (весь
+backend) — 657 passed, 3 skipped, регрессий нет. Раздел «Видео-транскрибация» добавлен в
+`FullSphera/project-context/06_TEST_CHECKLIST.md` (не `project-context2/` — сверено по
+ссылкам корневого `CLAUDE.md`). Ручной smoke-чеклист **заведён, не пройден** — нет живого
+видео и запущенного воркера в этой сессии (тот же блокер, что на E14-02/04). Не
+закоммичено. Детали — журнал `step-E14-08-tests-smoke.md` / `step-09-tests-smoke.md`
+внешнего плана.
+
+`2026-09-09` — шаг **E14-07** (retention guard, код в
 `sfera_backend`) реализован по явному разрешению владельца. `clean_expired_videos()` в
 `core/scheduler.py` перед удалением файла проверяет `TranscriptionJob.status`: DONE —
 удаляет как раньше (транскрипт уже в БД), не-DONE за 30 дней — жёсткий лимит без отсрочек
@@ -332,11 +354,15 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-05 | Отдать транскрипт/summary в API карточки кандидата (`step-E14-05-api-expose.md`) | DONE | 2026-09-07 |
 | E14-06 | UI в карточке кандидата HR/Admin, код в `SPHERA` (`step-E14-06-hr-ui.md`) | DONE | 2026-09-09 |
 | E14-07 | Retention guard, код в `sfera_backend` (`step-E14-07-retention-guard.md`) | DONE | 2026-09-09 |
-| E14-08…10 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-08 | Тесты и smoke воркера транскрибации, код в `sfera_backend` (`step-E14-08-tests-smoke.md`) | DONE (автотесты; ручной smoke заведён, не пройден живым видео) | 2026-09-09 |
+| E14-09…10 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 | E15-01…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
+- `2026-09-09` — шаг **E14-08** (тесты и smoke воркера транскрибации, `sfera_backend`)
+  реализован по явному разрешению владельца на этот конкретный шаг — детали см. в блоке
+  «Последнее обновление» выше.
 - `2026-09-07` — шаг **E14-05** (транскрипт/summary в API карточки кандидата,
   `sfera_backend`) реализован по явному разрешению владельца на этот конкретный шаг.
   Эндпоинт `GET /api/v1/courses/{course_uuid}/candidates/{candidate_id}/answers/`
