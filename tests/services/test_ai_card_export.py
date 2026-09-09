@@ -7,7 +7,7 @@ from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.models.vacancy_profile import VacancyProfile
-from sfera_ai.services.export.ai_card import candidate_display_name, render_ai_card_pdf
+from sfera_ai.services.export.ai_card import _fact_value, candidate_display_name, render_ai_card_pdf
 
 
 def _make_vacancy_profile(session: Session, course_id: int) -> VacancyProfile:
@@ -243,6 +243,19 @@ def test_pdf_hides_resume_status_block_when_resume_done(tmp_engine):
     assert pdf_ok is not None
     assert pdf_missing is not None
     assert len(pdf_missing) > len(pdf_ok)
+
+
+def test_fact_value_prefers_resume_over_platform_answer_on_conflict():
+    facts = [
+        {"key": "city", "value": "Москва (анкета)", "evidence": [{"source_type": "ANSWER", "source_id": 1}]},
+        {"key": "city", "value": "Санкт-Петербург (резюме)", "evidence": [{"source_type": "HH_RESUME", "source_id": 2}]},
+    ]
+    assert _fact_value(facts, "city") == "Санкт-Петербург (резюме)"
+
+
+def test_fact_value_falls_back_to_answer_without_resume():
+    facts = [{"key": "city", "value": "Москва (анкета)", "evidence": [{"source_type": "ANSWER", "source_id": 1}]}]
+    assert _fact_value(facts, "city") == "Москва (анкета)"
 
 
 def test_returns_none_when_no_current_analysis(tmp_engine):

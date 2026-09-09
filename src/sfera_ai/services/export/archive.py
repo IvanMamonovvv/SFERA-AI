@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.services.candidate_transfer import mark_candidate_transferred
 from sfera_ai.services.export.ai_card import candidate_display_name, render_ai_card_pdf
 from sfera_ai.services.export.files import collect_export_files
+from sfera_ai.services.export.pdf_merge import merge_card_with_resume
 
 _PDF_MAGIC = b"%PDF"
 _DOCX_MAGIC = b"PK\x03\x04"
@@ -42,10 +43,13 @@ def build_candidates_export_archive(
     s3_bucket: str,
 ) -> bytes:
     """step-E9-03 — zip на несколько кандидатов, выбранных в UI: одна подпапка на
-    кандидата (`card.pdf`/`resume.<ext>`/`video.mp4`), формат согласован с владельцем
-    2026-08-31. Недоступные файлы не блокируют экспорт остальных — фиксируются в
-    `manifest.txt` подпапки. step-E15-05 — «передан» (`CandidateVacancyTransfer`)
-    помечается только кандидат, у которого реально собрался `card.pdf`."""
+    кандидата (`card.pdf`/`video.mp4`), формат согласован с владельцем 2026-08-31.
+    step-E17-03 (2026-09-10) — резюме PDF мерджится страницами в `card.pdf` вместо
+    отдельного `resume.<ext>`; не-PDF резюме — страница-заглушка в `card.pdf` +
+    сам файл резюме всё равно отдельно в ZIP (fallback, п.1 журнала step-E17-03).
+    Недоступные файлы не блокируют экспорт остальных — фиксируются в `manifest.txt`
+    подпапки. step-E15-05 — «передан» (`CandidateVacancyTransfer`) помечается только
+    кандидат, у которого реально собрался `card.pdf`."""
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for candidate_profile_id in candidate_profile_ids:
@@ -54,23 +58,29 @@ def build_candidates_export_archive(
             unavailable: list[str] = []
 
             pdf = render_ai_card_pdf(session, candidate_profile_id, course_id)
-            if pdf is not None:
-                archive.writestr(f"{folder}/card.pdf", pdf)
-                mark_candidate_transferred(session, candidate_profile_id=candidate_profile_id, course_id=course_id)
-            else:
-                unavailable.append("card.pdf: недоступно (нет текущего анализа)")
 
             files = collect_export_files(
                 session, platform_base, candidate_profile_id,
                 hh_client=hh_client, s3_client=s3_client, s3_bucket=s3_bucket,
             )
-
             resume = files["resume"]
-            if resume["available"]:
-                ext = _sniff_resume_extension(resume["bytes"])
-                archive.writestr(f"{folder}/resume.{ext}", resume["bytes"])
+            resume_ext = _sniff_resume_extension(resume["bytes"]) if resume["available"] else None
+
+            if pdf is not None:
+                if resume["available"]:
+                    pdf = merge_card_with_resume(pdf, resume["bytes"], resume_ext)
+                    if resume_ext != "pdf":
+                        archive.writestr(f"{folder}/resume.{resume_ext}", resume["bytes"])
+                else:
+                    unavailable.append("resume: недоступно (резюме не найдено)")
+                archive.writestr(f"{folder}/card.pdf", pdf)
+                mark_candidate_transferred(session, candidate_profile_id=candidate_profile_id, course_id=course_id)
             else:
-                unavailable.append("resume: недоступно (резюме не найдено)")
+                unavailable.append("card.pdf: недоступно (нет текущего анализа)")
+                if resume["available"]:
+                    archive.writestr(f"{folder}/resume.{resume_ext}", resume["bytes"])
+                else:
+                    unavailable.append("resume: недоступно (резюме не найдено)")
 
             video = files["video"]
             if video["available"]:

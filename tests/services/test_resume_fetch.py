@@ -8,7 +8,7 @@ from sfera_ai.integrations.hh_client import HHClientError
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.platform_db import reflect_platform_tables
-from sfera_ai.services.resume_fetch import fetch_resume_bytes
+from sfera_ai.services.resume_fetch import fetch_resume_bytes, fetch_resume_bytes_readonly
 
 
 def _platform_base_with_answer(answer_id: int, file_key: str | None):
@@ -194,6 +194,32 @@ def test_fetch_hh_resume_without_mapping_marks_failed(tmp_engine):
         assert result is None
         assert extract.status == "FAILED"
         assert "mapping" in extract.error
+
+
+def test_fetch_resume_bytes_readonly_error_does_not_mutate_status(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base_with_answer(1, "answer_file/resume.pdf")
+    s3_client = MagicMock()
+    s3_client.get_object.side_effect = Exception("connection refused")
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="ANKETA_FILE", source_answer_id=1, status="DONE",
+        )
+        session.add(extract)
+        session.commit()
+
+        result = fetch_resume_bytes_readonly(
+            extract, session=session, platform_base=platform_base,
+            hh_client=MagicMock(), s3_client=s3_client, s3_bucket="test-bucket",
+        )
+
+        assert result is None
+        assert extract.status == "DONE"
+        assert extract.error == ""
 
 
 def test_fetch_hh_resume_profile_without_negotiation_id_marks_failed(tmp_engine):

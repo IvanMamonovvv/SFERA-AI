@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from sfera_ai.db.base import Base
@@ -123,6 +123,37 @@ def test_no_resume_extract_marks_resume_unavailable(tmp_engine):
 
         assert result["resume"] == {"available": False, "bytes": None, "source_type": None}
         assert result["video"] == {"available": False, "bytes": None, "answer_id": None}
+
+
+def test_resume_refetch_failure_at_export_does_not_corrupt_done_status(tmp_engine):
+    """Регрессия E17-02 (кандидат 2398, `04_STATE.md` 2026-09-06/2026-09-09): экспорт
+    перескачивает файл уже готового (`status=DONE`) резюме для вложения в zip —
+    временный сбой S3/HH при этом не должен переводить extract в `FAILED` (это поле
+    отражает успех экстракции текста, используется в скоринге/фактах, а не доступность
+    файла прямо сейчас)."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(resume_answer=(1, "resume.pdf"))
+    s3_client = _s3_client({})  # resume.pdf отсутствует в S3 при повторном скачивании
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=7)
+        session.add(profile)
+        session.commit()
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=profile.id, source_type="ANKETA_FILE", source_answer_id=1, status="DONE",
+            )
+        )
+        session.commit()
+
+        result = collect_export_files(
+            session, platform_base, profile.id, hh_client=MagicMock(), s3_client=s3_client, s3_bucket="bucket",
+        )
+
+        assert result["resume"] == {"available": False, "bytes": None, "source_type": "ANKETA_FILE"}
+        extract = session.scalar(select(ResumeExtract).where(ResumeExtract.candidate_profile_id == profile.id))
+        assert extract.status == "DONE"
+        assert extract.error == ""
 
 
 def test_unknown_candidate_profile_id_returns_unavailable(tmp_engine):

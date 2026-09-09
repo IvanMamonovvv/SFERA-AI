@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.services.change_detection import get_candidate_id
-from sfera_ai.services.resume_fetch import fetch_resume_bytes
+from sfera_ai.services.resume_fetch import fetch_resume_bytes_readonly
 
 
 def _resume_file(session: Session, platform_base, profile: CandidateProfile, *, hh_client, s3_client, s3_bucket):
@@ -15,7 +15,7 @@ def _resume_file(session: Session, platform_base, profile: CandidateProfile, *, 
     )
     if extract is None:
         return {"available": False, "bytes": None, "source_type": None}
-    data = fetch_resume_bytes(
+    data = fetch_resume_bytes_readonly(
         extract, session=session, platform_base=platform_base,
         hh_client=hh_client, s3_client=s3_client, s3_bucket=s3_bucket,
     )

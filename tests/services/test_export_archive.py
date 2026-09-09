@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from io import BytesIO
 from unittest.mock import MagicMock
 
+from pypdf import PdfReader
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -19,7 +22,7 @@ TABLES = ("courses_application", "testchecks_testattempt", "testchecks_answer", 
 COURSE_ID = 1
 
 
-def _platform_base(*, video_answer=None, application_id=7, candidate_id=100):
+def _platform_base(*, video_answer=None, resume_answer=None, application_id=7, candidate_id=100):
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as conn:
         conn.exec_driver_sql("CREATE TABLE courses_application (id INTEGER PRIMARY KEY, candidate_id INTEGER)")
@@ -40,7 +43,21 @@ def _platform_base(*, video_answer=None, application_id=7, candidate_id=100):
             conn.exec_driver_sql(
                 f"INSERT INTO testchecks_transcriptionjob (answer_id, status) VALUES ({answer_id}, 'DONE')"
             )
+        if resume_answer is not None:
+            answer_id, file_key = resume_answer
+            conn.exec_driver_sql(
+                f"INSERT INTO testchecks_answer (id, attempt_id, file) VALUES ({answer_id}, 1, '{file_key}')"
+            )
     return reflect_platform_tables(engine, tables=TABLES)
+
+
+def _valid_pdf_bytes() -> bytes:
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    c.drawString(100, 700, "resume page")
+    c.showPage()
+    c.save()
+    return buffer.getvalue()
 
 
 def _s3_client(files: dict[str, bytes]):
@@ -103,6 +120,99 @@ def test_archive_contains_subfolder_per_candidate_with_available_files(tmp_engin
         assert f"{folder}/manifest.txt" in names
         manifest = archive.read(f"{folder}/manifest.txt").decode()
         assert "resume: недоступно" in manifest
+
+
+def test_pdf_resume_merges_into_card_pdf_not_separate_file(tmp_engine):
+    """step-E17-03 — резюме PDF мерджится страницами в card.pdf, не отдельный resume.pdf."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100, resume_answer=(1, "resume.pdf"))
+    s3_client = _s3_client({"resume.pdf": _valid_pdf_bytes()})
+
+    with Session(tmp_engine) as session:
+        candidate_profile_id = _seed_candidate_with_analysis(session, application_id=7)
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=candidate_profile_id, source_type="ANKETA_FILE",
+                source_answer_id=1, status="DONE",
+            )
+        )
+        session.commit()
+
+        archive_bytes = build_candidates_export_archive(
+            session, platform_base, [candidate_profile_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=s3_client, s3_bucket="bucket",
+        )
+
+    with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+        folder = f"candidate_{candidate_profile_id}"
+        names = set(archive.namelist())
+        assert f"{folder}/card.pdf" in names
+        assert f"{folder}/resume.pdf" not in names
+        card_pages = len(PdfReader(BytesIO(archive.read(f"{folder}/card.pdf"))).pages)
+        assert card_pages == 2  # 1 карточка + 1 резюме
+
+
+def test_non_pdf_resume_gets_stub_page_and_stays_as_separate_file(tmp_engine):
+    """step-E17-03 п.1 — резюме не PDF: страница-заглушка в card.pdf + сам файл всё равно в ZIP."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100, resume_answer=(1, "resume.docx"))
+    s3_client = _s3_client({"resume.docx": b"PK\x03\x04docx-not-a-real-docx"})
+
+    with Session(tmp_engine) as session:
+        candidate_profile_id = _seed_candidate_with_analysis(session, application_id=7)
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=candidate_profile_id, source_type="ANKETA_FILE",
+                source_answer_id=1, status="DONE",
+            )
+        )
+        session.commit()
+
+        archive_bytes = build_candidates_export_archive(
+            session, platform_base, [candidate_profile_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=s3_client, s3_bucket="bucket",
+        )
+
+    with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+        folder = f"candidate_{candidate_profile_id}"
+        names = set(archive.namelist())
+        assert f"{folder}/card.pdf" in names
+        assert f"{folder}/resume.docx" in names
+        assert archive.read(f"{folder}/resume.docx") == b"PK\x03\x04docx-not-a-real-docx"
+        card_pages = len(PdfReader(BytesIO(archive.read(f"{folder}/card.pdf"))).pages)
+        assert card_pages == 2  # 1 карточка + 1 заглушка
+
+
+def test_resume_written_separately_when_card_pdf_unavailable(tmp_engine):
+    """Резюме доступно, но card.pdf нет (нет анализа) — merge не применим, резюме кладём как раньше."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(application_id=7, candidate_id=100, resume_answer=(1, "resume.pdf"))
+    s3_client = _s3_client({"resume.pdf": b"%PDF-1.4\nresume-bytes"})
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=7, facts=[])
+        session.add(profile)
+        session.commit()
+        candidate_profile_id = profile.id
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=candidate_profile_id, source_type="ANKETA_FILE",
+                source_answer_id=1, status="DONE",
+            )
+        )
+        session.commit()
+
+        archive_bytes = build_candidates_export_archive(
+            session, platform_base, [candidate_profile_id], COURSE_ID,
+            hh_client=MagicMock(), s3_client=s3_client, s3_bucket="bucket",
+        )
+
+    with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+        folder = f"candidate_{candidate_profile_id}"
+        names = set(archive.namelist())
+        assert f"{folder}/card.pdf" not in names
+        assert f"{folder}/resume.pdf" in names
+        assert archive.read(f"{folder}/resume.pdf") == b"%PDF-1.4\nresume-bytes"
 
 
 def test_archive_manifest_notes_expired_video_and_missing_analysis(tmp_engine):

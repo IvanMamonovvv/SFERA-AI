@@ -22,7 +22,32 @@ _SYSTEM_PROMPT = (
     "факта, value - его значение строкой, answer_id - id ответа-источника."
 )
 
-_RESUME_FACT_KEYS = ("experience_years", "positions", "companies", "salary_expectation")
+_RESUME_FACT_KEYS = ("experience_years", "positions", "companies", "salary_expectation", "phone_number", "city")
+
+# E13-01 (решение владельца 2026-09-01) — приоритет источников при конфликте значений
+# одного ключа: резюме (HH_RESUME/ANKETA_FILE) > ответы анкеты (ANSWER) > видео (VIDEO).
+_SOURCE_PRIORITY = {"HH_RESUME": 3, "ANKETA_FILE": 3, "ANSWER": 2, "VIDEO": 1}
+
+
+def _fact_priority(source_type: str | None) -> int:
+    return _SOURCE_PRIORITY.get(source_type, 0)
+
+
+def pick_fact_value(facts: list[dict[str, Any]], key: str) -> Any | None:
+    """Среди всех фактов с данным `key` выбирает значение факта с наиболее приоритетным
+    источником ([[project_source_priority_resume_answers_video]]), а не первое по порядку
+    добавления в `profile.facts` — см. журнал step-E17-01."""
+    best_fact: dict[str, Any] | None = None
+    best_priority = -1
+    for fact in facts:
+        if fact.get("key") != key:
+            continue
+        evidence = fact.get("evidence") or [{}]
+        priority = _fact_priority(evidence[0].get("source_type"))
+        if priority > best_priority:
+            best_fact = fact
+            best_priority = priority
+    return best_fact.get("value") if best_fact is not None else None
 
 
 def _resume_facts(extract: ResumeExtract) -> list[dict[str, Any]]:

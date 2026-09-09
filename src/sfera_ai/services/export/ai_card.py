@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.resume_extract import ResumeExtract
-from sfera_ai.services.candidate_facts import resume_status
+from sfera_ai.services.candidate_facts import pick_fact_value, resume_status
 
 # step-E12-01 — Helvetica (AFM) не поддерживает кириллицу, весь русский текст в PDF
 # рендерился чёрными прямоугольниками. DejaVu Sans — TTF с кириллицей, вендорим файл
@@ -132,10 +132,7 @@ def _has_video(facts: list[dict[str, Any]]) -> bool:
 
 
 def _fact_value(facts: list[dict[str, Any]], key: str) -> Any | None:
-    for fact in facts:
-        if fact.get("key") == key:
-            return fact.get("value")
-    return None
+    return pick_fact_value(facts, key)
 
 
 def _strip_block(video_present: bool) -> Table:
