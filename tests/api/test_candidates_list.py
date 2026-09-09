@@ -359,6 +359,8 @@ def test_screening_candidates_filters_sorts_and_flags_transferred():
     assert [item["candidate_profile_id"] for item in body["items"]] == [passing_high_id, passing_low_id]
     assert body["items"][0]["transferred"] is True
     assert body["items"][1]["transferred"] is False
+    assert body["items"][0]["application_id"] == 3
+    assert body["items"][1]["application_id"] == 2
 
 
 def test_screening_candidates_unknown_course_returns_404():

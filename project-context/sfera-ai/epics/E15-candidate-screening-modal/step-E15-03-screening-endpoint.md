@@ -55,3 +55,8 @@ uv run pytest tests/api/test_candidates_list.py -k screening
   `floor(fit_score/10)` — вопрос отображения, не API-контракта, эндпоинт не трогает.
   Тесты в `tests/api/test_candidates_list.py`: пустой курс, фильтр+сортировка+`transferred`,
   404 на неизвестный course_uuid. `uv run pytest` — 200 passed.
+- `2026-09-09` (на шаге E15-08) — добавлено поле `application_id` (nullable) в ответ:
+  `candidate_profile_id` — внутренний id SFERA-AI, платформе неизвестный, фронтенду
+  SPHERA нечем сопоставить строку скрининга с именем/email кандидата. Новый
+  `_application_id_by_candidate_profile` в `api_read.py`. Тест дополнен двумя assert.
+  Контракт расширен аддитивно (новое поле), обратной совместимости не нарушает.

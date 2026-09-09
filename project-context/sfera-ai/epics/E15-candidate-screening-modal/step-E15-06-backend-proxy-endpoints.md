@@ -81,3 +81,9 @@ python manage.py test courses -k screening
   похода к сервису в этих тестах нет (он покрыт `test_client.py`, E15-07).
   `manage.py test courses` — 206/206 зелёных, регрессий нет. Не закоммичено
   (рабочая копия `sfera_backend`) — ждёт решения владельца по коммиту/PR.
+- `2026-09-09` (на шаге E15-08) — `VacancyProfileProxyCreateView` переименован в
+  `VacancyProfileProxyView`, добавлен `get()` (проксирует `fetch_vacancy_profile`,
+  E15-07) — без него фронтенду нечем предзаполнить textarea текущим портретом
+  (явный DoD E15-08, упущенный в исходном плане шага). URL-имя
+  `ai-analysis-vacancy-profile` не менялось, тот же `permission_classes`. Тесты
+  дополнены (GET: своя компания, портрета ещё нет → `null`, чужая компания → 403).
