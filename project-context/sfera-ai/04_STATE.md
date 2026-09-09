@@ -4,7 +4,18 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` — заведён эпик **E15** («Обработка кандидатов»,
+**Последнее обновление:** `2026-09-09` — шаг **E14-07** (retention guard, код в
+`sfera_backend`) реализован по явному разрешению владельца. `clean_expired_videos()` в
+`core/scheduler.py` перед удалением файла проверяет `TranscriptionJob.status`: DONE —
+удаляет как раньше (транскрипт уже в БД), не-DONE за 30 дней — жёсткий лимит без отсрочек
+(owner decision 2026-09-07), видео всё равно удаляется, джоб помечается `FAILED` + лог
+`logger.warning`. `check_disk_pressure()` — очередь на удаление при нехватке места
+отсортирована так, чтобы видео с `DONE`-джобом удалялись первыми. Тесты —
+`core/tests/test_retention_guard.py` (6, все зелёные), регрессий в `test_scheduler`/
+`test_transcription_enqueue` нет. Не закоммичено. Детали — `step-E14-07-retention-guard.md` /
+`step-08-retention-guard.md` внешнего плана.
+
+`2026-09-09` — заведён эпик **E15** («Обработка кандидатов»,
 модалка HR-скрининга по портрету вакансии, дизайн —
 `docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md`, карта шагов —
 `05_EPICS.md`/`epics/E15-candidate-screening-modal/`). Дизайн согласован владельцем
@@ -320,7 +331,8 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-04 | Воркер `run_transcription_worker` (`step-E14-04-worker-command.md`) | DONE (код, живой прогон на step-09 внешнего плана) | 2026-09-07 |
 | E14-05 | Отдать транскрипт/summary в API карточки кандидата (`step-E14-05-api-expose.md`) | DONE | 2026-09-07 |
 | E14-06 | UI в карточке кандидата HR/Admin, код в `SPHERA` (`step-E14-06-hr-ui.md`) | DONE | 2026-09-09 |
-| E14-07…10 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
+| E14-07 | Retention guard, код в `sfera_backend` (`step-E14-07-retention-guard.md`) | DONE | 2026-09-09 |
+| E14-08…10 | Остальная реализация видео-транскрибации в `sfera_backend`/`SPHERA` (другой репозиторий, план — `epics/E14-video-transcription-worker/`) | TODO | — |
 | E15-01…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
