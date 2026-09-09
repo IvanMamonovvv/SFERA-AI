@@ -27,6 +27,7 @@
 | E10 | Ручной прогон вакансии + сборка портрета из ссылки (CLI, demo без UI) | E6, E9 | средний (реальные LLM-вызовы на всех кандидатах вакансии) |
 | E13 | Приоритет источников (резюме > ответы > видео) + видимость «нет резюме» | E6, E9, E10 | низкий-средний (меняет промпт fit-scoring, версия промпта) |
 | E14 | Реализация видео-транскрибации в `sfera_backend` (внешний код, трекинг из SFERA-AI) | E4 | требует явного разрешения владельца на каждый шаг — другой репозиторий |
+| E15 | «Обработка кандидатов» — модалка HR-скрининга по портрету вакансии (SFERA-AI + `sfera_backend` + `SPHERA`) | E6, E8, E9 | часть шагов в других репозиториях — явное разрешение на каждый |
 
 ## Разбивка на шаги
 
@@ -300,6 +301,53 @@ step-NN-*.md`; шаги ниже — только краткая карта + я
   E14-01/02/03.
   транскрипт + пересказ видеовизитки в проде.
 
+### E15 — «Обработка кандидатов» (модалка HR-скрининга)
+
+Дизайн согласован владельцем 2026-09-08, ревью архитектурных рисков проведено —
+**`docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md`** (не
+дублировать содержимое сюда, «один факт — один файл»). Заменяет подход, ранее
+предполагавшийся частью `step-E14-06-hr-ui.md` («batch-scoring approach») — сам
+`E14-06` остаётся про другое (транскрипт видео в карточке одного кандидата), не
+пересекается с этим эпиком.
+
+Один эпик, шаги физически в трёх репозиториях (см. дизайн-документ, раздел
+«Авторизация и межсервисный вызов») — по аналогии с E14: шаги в `SFERA-AI` без
+ограничений, шаги в `sfera_backend`/`SPHERA` требуют отдельного явного разрешения
+владельца на каждый конкретный шаг.
+
+**Блок A — SFERA-AI (свой репозиторий):**
+- [ ] `epics/E15-candidate-screening-modal/step-E15-01-transfer-model.md` — модель
+  `CandidateVacancyTransfer` + Alembic-ревизия, уникальный индекс
+  `(candidate_profile_id, course_id)`, upsert обновляет `transferred_at`.
+- [ ] `epics/E15-candidate-screening-modal/step-E15-02-enqueue-full-screening.md` —
+  `enqueue_full_screening_for_course(session, course_id)` в `job_detection.py`,
+  выполняется асинхронно (не в теле HTTP-запроса), дедуп джоб защищён от гонки
+  двойного «Сохранить» (partial unique index в БД или гвард на вызывающей стороне).
+- [ ] `epics/E15-candidate-screening-modal/step-E15-03-screening-endpoint.md` —
+  `GET .../candidates/screening/` (`fit_score >= 60`, сортировка по убыванию,
+  `transferred: bool`), фикс отображения `floor(fit_score/10)` вместо `round`.
+- [ ] `epics/E15-candidate-screening-modal/step-E15-04-vacancy-profile-trigger.md` —
+  `POST .../vacancy-profile/` дополняется вызовом `enqueue_full_screening_for_course`.
+- [ ] `epics/E15-candidate-screening-modal/step-E15-05-export-transfer-mark.md` —
+  `POST .../export/` проставляет `CandidateVacancyTransfer` только для кандидатов с
+  реально собранным `card.pdf`, не для всех id из запроса.
+
+**Блок B — `sfera_backend` (другой репозиторий, разрешение на каждый шаг):**
+- [ ] `epics/E15-candidate-screening-modal/step-E15-06-backend-proxy-endpoints.md` —
+  новые проксирующие view (по паттерну `CandidateArchiveJob*View`,
+  `courses/views.py`) для screening/vacancy-profile/export, защищены существующим
+  `CourseCandidatesManagementPermission`.
+- [ ] `epics/E15-candidate-screening-modal/step-E15-07-sfera-ai-client.md` — новый
+  HTTP-клиент к SFERA-AI (`integrations/sfera_ai/client.py`, по образцу
+  `integrations/headhunter/client.py`) + секрет `SFERA_AI_SHARED_SECRET` в
+  settings/env (парный к `bff_shared_secret`, уже существующему в SFERA-AI).
+
+**Блок C — `SPHERA` (фронтенд, разрешение на каждый шаг):**
+- [ ] `epics/E15-candidate-screening-modal/step-E15-08-hr-ui-modal.md` — кнопка
+  «Обработка кандидатов» + модалка (textarea портрета, список, экспорт
+  одиночный/массовый), вызывает только проксирующие endpoint'ы блока B, не SFERA-AI
+  напрямую.
+
 ## Граф зависимостей
 
 E0 → E1, E2, E4
@@ -315,3 +363,4 @@ E10 → E11
 E9 → E12
 E6, E9, E10 → E13
 E4 → E14 (реализация в sfera_backend, каждый шаг — отдельное разрешение владельца)
+E6, E8, E9 → E15 (шаги в sfera_backend/SPHERA — отдельное разрешение владельца на каждый)

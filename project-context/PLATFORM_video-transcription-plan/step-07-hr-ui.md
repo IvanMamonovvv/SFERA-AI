@@ -1,6 +1,6 @@
 # Step 07 — UI в карточке кандидата (HR/Admin)
 
-**Статус:** ⬜ TODO
+**Статус:** ✅ DONE
 **Зависит от:** step-06.
 **Цель:** HR видит рядом с видеовизиткой: статус обработки, итоговое summary (без вердикта —
 решено владельцем 2026-09-07), и может раскрыть полный транскрипт.
@@ -39,4 +39,15 @@
 - [ ] Кандидат этих данных не видит (RBAC на уровне API, UI — только HR/Admin роут).
 
 ## Журнал
-- (пусто)
+- 2026-09-09: реализовано в `SPHERA` с явного разрешения владельца (правка чужого репозитория).
+  Тип `CandidateAnswerTranscription` (`status`/`summary`/`transcript`/`isEmpty`, без `verdict`) —
+  `model/candidate-model.ts`. `ApiTranscription` и поле `transcription` в `ApiAnswerRow` —
+  `lib/candidate-application-mapper.ts`. Маппинг в `mapAnswerRow` (только для видеоответов) —
+  `lib/candidate-answers-mapper.ts`. UI-блок «Разбор видеовизитки» — новый компонент
+  `TranscriptionBlock` в `shared/components/CandidateProfile/CandidateProfile.tsx` +
+  стили в `CandidateProfile.module.scss`: бейдж статуса (спиннер на PENDING/PROCESSING,
+  цвет на DONE/FAILED), summary всегда на виду, транскрипт под спойлером-кнопкой,
+  пустое видео → текст «Кандидат не произнёс распознаваемой речи». Без агрессивного поллинга —
+  обновление данных при перезаходе (как согласовано в UX-заметке). RBAC не трогал — эндпоинт
+  и так HR/Admin-only (E14-05), кандидат этот JSON не получает. `npx tsc --noEmit` и `eslint`
+  по правленым файлам — чисто.
