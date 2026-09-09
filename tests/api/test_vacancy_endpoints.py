@@ -1,10 +1,14 @@
+import threading
+import time
+
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from sfera_ai.api.app import create_app
 from sfera_ai.db.base import Base
+from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.vacancy_feedback import VacancyFeedback
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.providers import LLMProviderError, LLMResult
@@ -18,7 +22,7 @@ def _memory_engine():
     return create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
 
-def _platform_engine():
+def _platform_engine(application_count: int = 0):
     engine = _memory_engine()
     with engine.begin() as conn:
         conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, course_uuid TEXT)")
@@ -26,11 +30,27 @@ def _platform_engine():
         conn.exec_driver_sql(
             "CREATE TABLE courses_application (id INTEGER PRIMARY KEY, candidate_id INTEGER, course_id INTEGER)"
         )
+        for i in range(application_count):
+            conn.exec_driver_sql(
+                f"INSERT INTO courses_application (candidate_id, course_id) VALUES ({100 + i}, {COURSE_ID})"
+            )
         conn.exec_driver_sql(
             "CREATE TABLE courses_progress (id INTEGER PRIMARY KEY, candidate_id INTEGER, course_id INTEGER, "
             "completed_lessons INTEGER, total_lessons INTEGER)"
         )
+        conn.exec_driver_sql(
+            "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, application_id INTEGER)"
+        )
     return engine
+
+
+def _wait_for(predicate, *, timeout: float = 2.0, interval: float = 0.02) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
 
 
 def _write_engine():
@@ -247,6 +267,60 @@ def test_approve_feedback_already_applied_returns_409():
         )
 
     assert response.status_code == 409
+
+
+def test_post_vacancy_profile_enqueues_full_screening_in_background():
+    write_engine = _write_engine()
+    client = _client(write_engine, platform_engine=_platform_engine(application_count=3))
+
+    with client:
+        response = client.post(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
+            headers=_headers(),
+            json={"requirements": {"skills": ["python"]}, "notes": "junior"},
+        )
+        assert response.status_code == 201
+
+        session = sessionmaker(bind=write_engine)()
+
+        def _jobs_created() -> bool:
+            return len(session.scalars(select(AIProcessingJob).where(AIProcessingJob.reason == "BACKFILL")).all()) == 3
+
+        assert _wait_for(_jobs_created)
+        session.close()
+
+
+def test_post_vacancy_profile_response_not_blocked_by_full_screening(monkeypatch):
+    import sfera_ai.api.routes.vacancy as vacancy_route
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def _slow_enqueue(session, platform_base, course_id):
+        started.set()
+        release.wait(timeout=2.0)
+        return []
+
+    monkeypatch.setattr(vacancy_route, "enqueue_full_screening_for_course", _slow_enqueue)
+
+    write_engine = _write_engine()
+    client = _client(write_engine, platform_engine=_platform_engine(application_count=5))
+
+    try:
+        with client:
+            start = time.monotonic()
+            response = client.post(
+                f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
+                headers=_headers(),
+                json={"requirements": {"skills": ["python"]}, "notes": "junior"},
+            )
+            elapsed = time.monotonic() - start
+
+            assert response.status_code == 201
+            assert started.wait(timeout=2.0)
+            assert elapsed < 1.0
+    finally:
+        release.set()
 
 
 def test_approve_feedback_unknown_id_returns_404():
