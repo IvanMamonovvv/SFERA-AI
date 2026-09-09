@@ -7,8 +7,11 @@ from sqlalchemy.orm import Session as PlatformSession
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
+from sfera_ai.models.candidate_vacancy_transfer import CandidateVacancyTransfer
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.services.candidate_facts import resume_status
+
+SCREENING_FIT_SCORE_THRESHOLD = 60
 
 QUEUED_STATUSES = ("PENDING", "PROCESSING")
 
@@ -302,3 +305,63 @@ def list_candidates(session: Session, platform_base, course_id: int, *, limit: i
             }
         )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def list_screening_candidates(session: Session, platform_base, course_id: int) -> dict[str, Any]:
+    """step-E15-03 — кандидаты курса с `fit_score >= 60` для модалки скрининга,
+    отсортированные по убыванию `fit_score`, поля как в `list_candidates` +
+    `transferred` (E15-01, `CandidateVacancyTransfer`)."""
+    rows = (
+        session.execute(
+            select(CandidateVacancyAnalysis)
+            .where(
+                CandidateVacancyAnalysis.course_id == course_id,
+                CandidateVacancyAnalysis.is_current.is_(True),
+                CandidateVacancyAnalysis.fit_score >= SCREENING_FIT_SCORE_THRESHOLD,
+            )
+            .order_by(CandidateVacancyAnalysis.fit_score.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+    candidate_profile_ids = [row.candidate_profile_id for row in rows]
+    demo_progress_map = _demo_progress_by_candidate_profile(session, platform_base, course_id, candidate_profile_ids)
+    resume_status_map = _resume_status_by_candidate_profile(session, candidate_profile_ids)
+    transferred_ids = set(
+        session.scalars(
+            select(CandidateVacancyTransfer.candidate_profile_id).where(
+                CandidateVacancyTransfer.course_id == course_id,
+                CandidateVacancyTransfer.candidate_profile_id.in_(candidate_profile_ids),
+            )
+        ).all()
+    )
+
+    items = []
+    for analysis in rows:
+        previous_fit_score = session.scalar(
+            select(CandidateVacancyAnalysis.fit_score).where(
+                CandidateVacancyAnalysis.candidate_profile_id == analysis.candidate_profile_id,
+                CandidateVacancyAnalysis.course_id == course_id,
+                CandidateVacancyAnalysis.version == analysis.version - 1,
+            )
+        )
+        fit_delta = (
+            analysis.fit_score - previous_fit_score
+            if analysis.fit_score is not None and previous_fit_score is not None
+            else None
+        )
+        items.append(
+            {
+                "candidate_profile_id": analysis.candidate_profile_id,
+                "fit_score": analysis.fit_score,
+                "confidence": analysis.confidence,
+                "data_completeness": analysis.data_completeness,
+                "recommendation": analysis.recommendation,
+                "fit_delta": fit_delta,
+                "demo_progress": demo_progress_map.get(analysis.candidate_profile_id),
+                "resume_status": resume_status_map.get(analysis.candidate_profile_id, "MISSING"),
+                "transferred": analysis.candidate_profile_id in transferred_ids,
+            }
+        )
+    return {"items": items}

@@ -10,6 +10,7 @@ from sfera_ai.db.base import Base
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
+from sfera_ai.models.candidate_vacancy_transfer import CandidateVacancyTransfer
 from sfera_ai.models.vacancy_profile import VacancyProfile
 
 SECRET = "test-secret"
@@ -266,3 +267,107 @@ def test_candidates_list_pagination():
     assert body["limit"] == 2
     assert body["offset"] == 1
     assert [item["candidate_profile_id"] for item in body["items"]] == profile_ids[1:3]
+
+
+def test_screening_candidates_empty_course():
+    client = _client(_write_engine(), _platform_engine())
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/candidates/screening/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}
+
+
+def test_screening_candidates_filters_sorts_and_flags_transferred():
+    write_engine = _write_engine()
+    session = sessionmaker(bind=write_engine)()
+    vacancy = VacancyProfile(course_id=COURSE_ID, version=1, is_current=True, requirements={})
+    session.add(vacancy)
+    session.flush()
+    below, passing_low, passing_high = (
+        CandidateProfile(application_id=1),
+        CandidateProfile(application_id=2),
+        CandidateProfile(application_id=3),
+    )
+    session.add_all([below, passing_low, passing_high])
+    session.flush()
+    session.add_all(
+        [
+            CandidateVacancyAnalysis(
+                candidate_profile_id=below.id,
+                course_id=COURSE_ID,
+                vacancy_profile_id=vacancy.id,
+                version=1,
+                is_current=True,
+                data_completeness=50,
+                confidence="LOW",
+                recommendation="NOT_ENOUGH_DATA",
+                fit_score=59,
+                analyzed_at=datetime.now(UTC),
+            ),
+            CandidateVacancyAnalysis(
+                candidate_profile_id=passing_low.id,
+                course_id=COURSE_ID,
+                vacancy_profile_id=vacancy.id,
+                version=1,
+                is_current=True,
+                data_completeness=60,
+                confidence="MEDIUM",
+                recommendation="POSSIBLE_MATCH",
+                fit_score=60,
+                analyzed_at=datetime.now(UTC),
+            ),
+            CandidateVacancyAnalysis(
+                candidate_profile_id=passing_high.id,
+                course_id=COURSE_ID,
+                vacancy_profile_id=vacancy.id,
+                version=1,
+                is_current=True,
+                data_completeness=90,
+                confidence="HIGH",
+                recommendation="STRONG_MATCH",
+                fit_score=85,
+                analyzed_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    session.add(
+        CandidateVacancyTransfer(
+            candidate_profile_id=passing_high.id,
+            course_id=COURSE_ID,
+            transferred_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+    passing_low_id, passing_high_id = passing_low.id, passing_high.id
+    session.close()
+
+    client = _client(write_engine, _platform_engine())
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/candidates/screening/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["candidate_profile_id"] for item in body["items"]] == [passing_high_id, passing_low_id]
+    assert body["items"][0]["transferred"] is True
+    assert body["items"][1]["transferred"] is False
+
+
+def test_screening_candidates_unknown_course_returns_404():
+    client = _client(_write_engine(), _platform_engine())
+
+    with client:
+        response = client.get(
+            "/api/v1/courses/unknown-course/ai-analysis/candidates/screening/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 404

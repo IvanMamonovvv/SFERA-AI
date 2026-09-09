@@ -1,6 +1,6 @@
 # Шаг E15-03 — `GET .../candidates/screening/`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (SFERA-AI) · **Зависит от:** E15-01
 **Перед началом:** прочитай `docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md`
 (разделы «API», «Данные» — округление); `src/sfera_ai/services/api_read.py`,
@@ -47,4 +47,11 @@ uv run pytest tests/api/test_candidates_list.py -k screening
 
 ## Журнал
 
-- (не начато)
+- 2026-09-09: `GET .../candidates/screening/` — `list_screening_candidates` в `api_read.py`
+  (фильтр `fit_score >= SCREENING_FIT_SCORE_THRESHOLD`=60, сортировка по убыванию
+  `fit_score`, поля как в `list_candidates` + `transferred` через join-запрос на
+  `CandidateVacancyTransfer`). Роут в `candidates.py` — объявлен ДО
+  `/candidates/{candidate_profile_id}/`, иначе FastAPI матчит `screening` как id.
+  `floor(fit_score/10)` — вопрос отображения, не API-контракта, эндпоинт не трогает.
+  Тесты в `tests/api/test_candidates_list.py`: пустой курс, фильтр+сортировка+`transferred`,
+  404 на неизвестный course_uuid. `uv run pytest` — 200 passed.
