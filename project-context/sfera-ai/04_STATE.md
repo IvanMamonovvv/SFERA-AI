@@ -4,19 +4,34 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-03**
-(`GET .../candidates/screening/`, свой репозиторий SFERA-AI, без ограничений) выполнен.
-Новая функция `list_screening_candidates` в `services/api_read.py` — кандидаты курса
-с `fit_score >= 60`, сортировка по убыванию `fit_score`, поля как в существующем
-`candidates/` + `transferred: bool` (join на `CandidateVacancyTransfer`, E15-01). Роут
+**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-04**
+(`POST vacancy-profile/` запускает полный скрининг курса) выполнен. `create_vacancy_profile`
+(`api/routes/vacancy.py`) после сохранения новой версии портрета запускает
+`enqueue_full_screening_for_course` в отдельном `threading.Thread` — не FastAPI
+`BackgroundTasks` (те выполняются до отправки ответа ASGI-клиенту, эффективно блокируя
+его так же, как прямой вызов в теле запроса — под `TestClient` DoD-тест на неблокирующий
+ответ иначе не верифицируем). Фоновая функция открывает свою `Session`
+(`sessionmaker(bind=app.state.engine)`) и свой `platform_base`
+(`reflect_platform_tables(..., tables=IDENTITY_RESOLVER_TABLES)` — `courses_application` +
+`headhunter_hhnegotiationrecord`, минимум для `resolve_or_create_candidate_profile`), т.к.
+request-scoped ресурсы закрываются сразу после ответа. Тесты в
+`tests/api/test_vacancy_endpoints.py` — джобы реально ставятся в фоне (poll с таймаутом),
+мок задержки в `enqueue_full_screening_for_course` подтверждает что ответ `POST` не
+блокируется. `uv run pytest` — 202 passed. Детали — журнал
+`step-E15-04-vacancy-profile-trigger.md`.
+
+Предыдущий шаг: **E15-03** (`GET .../candidates/screening/`) выполнен. Новая функция
+`list_screening_candidates` в `services/api_read.py` — кандидаты курса с `fit_score >= 60`,
+сортировка по убыванию `fit_score`, поля как в существующем `candidates/` +
+`transferred: bool` (join на `CandidateVacancyTransfer`, E15-01). Роут
 `/candidates/screening/` в `api/routes/candidates.py` объявлен ДО
 `/candidates/{candidate_profile_id}/` — иначе FastAPI матчит `screening` как id.
 `floor(fit_score/10)` из design doc — вопрос отображения на фронте, не контракта этого
 эндпоинта, не реализовывался здесь. Тесты в `tests/api/test_candidates_list.py`
-(пустой курс, фильтр+сортировка+`transferred`, 404 неизвестный курс), весь
-`uv run pytest` — 200 passed. Детали — журнал `step-E15-03-screening-endpoint.md`.
+(пустой курс, фильтр+сортировка+`transferred`, 404 неизвестный курс). Детали — журнал
+`step-E15-03-screening-endpoint.md`.
 
-Предыдущий шаг: **E15-02** (`enqueue_full_screening_for_course`) выполнен — новая
+Ранее: **E15-02** (`enqueue_full_screening_for_course`) выполнен — новая
 функция в `services/job_detection.py` ставит `AIProcessingJob` на всех кандидатов
 курса (включая не анализированных ранее), reason `BACKFILL`, дедуп через
 `_create_job_if_absent`. Защита от гонки при двойном «Сохранить» — вариант с

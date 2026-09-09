@@ -1,16 +1,19 @@
+import threading
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import Engine, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from sfera_ai.api.deps import get_llm_client, get_platform_engine, get_session, resolve_course_or_404
 from sfera_ai.models.vacancy_feedback import VacancyFeedback
 from sfera_ai.models.vacancy_memory import VacancyMemory
 from sfera_ai.models.vacancy_profile import VacancyProfile
+from sfera_ai.platform_db import IDENTITY_RESOLVER_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.feedback_interpretation import interpret_feedback
+from sfera_ai.services.job_detection import enqueue_full_screening_for_course
 from sfera_ai.services.vacancy_memory import FeedbackAlreadyAppliedError, approve_feedback
 from sfera_ai.services.vacancy_profile import create_vacancy_profile_version
 
@@ -93,10 +96,26 @@ def get_vacancy_profile(
     return _serialize_vacancy_profile(profile)
 
 
+def _run_full_screening_background(engine: Engine, platform_engine: Engine, course_id: int) -> None:
+    """step-E15-04 — постановка `AIProcessingJob` по всем кандидатам курса не должна
+    блокировать ответ `POST vacancy-profile/`: на курсах до ~500 кандидатов (демо-масштаб,
+    архитектурное ревью 2026-09-08) цикл по заявкам в `enqueue_full_screening_for_course`
+    занимает заметное время. Отдельный поток (не FastAPI `BackgroundTasks` — те выполняются
+    до отправки ответа тестовому/ASGI-клиенту, что фактически блокирует его так же, как
+    прямой вызов в теле запроса) — самый дешёвый вариант поверх текущего стека без отдельной
+    очереди задач; своя сессия и свой `platform_base`, т.к. request-scoped session закрывается
+    сразу после ответа."""
+    factory = sessionmaker(bind=engine)
+    platform_base = reflect_platform_tables(platform_engine, tables=IDENTITY_RESOLVER_TABLES)
+    with factory() as session:
+        enqueue_full_screening_for_course(session, platform_base, course_id)
+
+
 @router.post("/vacancy-profile/", status_code=201)
 def create_vacancy_profile(
     course_uuid: str,
     body: VacancyProfileCreate,
+    request: Request,
     session: Session = Depends(get_session),
     platform_engine: Engine = Depends(get_platform_engine),
 ) -> dict:
@@ -108,6 +127,11 @@ def create_vacancy_profile(
         notes=body.notes,
         created_by_id=body.created_by_id,
     )
+    threading.Thread(
+        target=_run_full_screening_background,
+        args=(request.app.state.engine, platform_engine, course_id),
+        daemon=True,
+    ).start()
     return _serialize_vacancy_profile(profile)
 
 
