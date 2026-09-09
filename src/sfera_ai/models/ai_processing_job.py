@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from sfera_ai.db.base import Base, TimestampMixin
@@ -19,6 +19,13 @@ class AIProcessingJob(TimestampMixin, Base):
     __tablename__ = "ai_processing_job"
     __table_args__ = (
         Index("ix_processing_job_status_retry_after", "status", "retry_after"),
+        Index(
+            "uq_processing_job_candidate_course_reason_open",
+            "candidate_profile_id", "course_id", "reason",
+            unique=True,
+            postgresql_where=text("status IN ('PENDING', 'PROCESSING')"),
+            sqlite_where=text("status IN ('PENDING', 'PROCESSING')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

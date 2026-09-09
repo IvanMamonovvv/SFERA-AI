@@ -1,3 +1,5 @@
+import threading
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -5,7 +7,7 @@ from sfera_ai.db.base import Base
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.platform_db import CHANGE_DETECTION_TABLES, reflect_platform_tables
-from sfera_ai.services.job_detection import detect_and_enqueue
+from sfera_ai.services.job_detection import _create_job_if_absent, detect_and_enqueue, enqueue_full_screening_for_course
 
 
 def _platform_base(*, applications=(), hh_records=()):
@@ -144,4 +146,75 @@ def test_no_duplicate_job_when_pending_already_exists(tmp_engine):
         created = detect_and_enqueue(session, platform_base)
 
         assert created == []
+        assert session.query(AIProcessingJob).count() == 1
+
+
+def test_full_screening_enqueues_for_all_course_applications(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(applications=[(7, 100, 5), (8, 101, 5), (9, 102, 6)])
+    with Session(tmp_engine) as session:
+        created = enqueue_full_screening_for_course(session, platform_base, course_id=5)
+
+        assert {j.reason for j in created} == {"BACKFILL"}
+        assert len(created) == 2
+        profiles = session.query(CandidateProfile).all()
+        assert {p.application_id for p in profiles} == {7, 8}
+
+
+def test_full_screening_does_not_duplicate_pending_job(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(applications=[(7, 100, 5)])
+    with Session(tmp_engine) as session:
+        first = enqueue_full_screening_for_course(session, platform_base, course_id=5)
+        assert len(first) == 1
+
+        second = enqueue_full_screening_for_course(session, platform_base, course_id=5)
+
+        assert second == []
+        assert session.query(AIProcessingJob).count() == 1
+
+
+def test_concurrent_create_job_if_absent_no_duplicate(tmp_path):
+    """Партиальный unique index (миграция 0004) — вторая транзакция ловит IntegrityError
+    на commit, если обе прошли SELECT одновременно (TOCTOU, риск найден архитектурным
+    ревью 2026-09-08, step-E15-02)."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'race.db'}", connect_args={"timeout": 30})
+    Base.metadata.create_all(engine)
+    with Session(engine) as setup_session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        setup_session.add(profile)
+        setup_session.commit()
+        profile_id = profile.id
+
+    barrier = threading.Barrier(2)
+    results: list[AIProcessingJob | None] = []
+    results_lock = threading.Lock()
+
+    def worker() -> None:
+        session = Session(engine)
+        original_scalar = session.scalar
+
+        def stalling_scalar(*args, **kwargs):
+            result = original_scalar(*args, **kwargs)
+            barrier.wait(timeout=5)
+            return result
+
+        session.scalar = stalling_scalar
+        job = _create_job_if_absent(
+            session, candidate_profile_id=profile_id, reason="BACKFILL", course_id=5,
+        )
+        with results_lock:
+            results.append(job)
+        session.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    created_jobs = [j for j in results if j is not None]
+    assert len(created_jobs) == 1
+
+    with Session(engine) as session:
         assert session.query(AIProcessingJob).count() == 1

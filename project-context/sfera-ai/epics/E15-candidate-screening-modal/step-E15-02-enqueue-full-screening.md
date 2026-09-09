@@ -1,6 +1,6 @@
 # Шаг E15-02 — `enqueue_full_screening_for_course`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (SFERA-AI) · **Зависит от:** E15-01
 **Перед началом:** прочитай `docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md`
 (разделы «Поток», «Новая сервисная функция», «Известные риски реализации»);
@@ -56,4 +56,26 @@ uv run pytest tests/services/test_job_detection.py -k full_screening
 
 ## Журнал
 
-- (не начато)
+- 2026-09-09: реализовано.
+  - `enqueue_full_screening_for_course(session, platform_base, course_id)` в
+    `job_detection.py` — перебор всех `Application` курса (по образцу
+    `run_full_course_screening.py`), `resolve_or_create_candidate_profile` +
+    `_create_job_if_absent(reason="BACKFILL")`.
+  - Защита от гонки — выбран вариант с DB-constraint (не guard на вызывающей стороне,
+    т.к. вызывающая сторона — другой репозиторий, `FullSphera`, правки требуют
+    отдельного разрешения). Partial unique index `(candidate_profile_id, course_id,
+    reason) WHERE status IN ('PENDING','PROCESSING')` уже стоял в БД с миграции 0004,
+    но отсутствовал в объявлении модели `AIProcessingJob.__table_args__` — из-за этого
+    `Base.metadata.create_all` (тестовая SQLite-схема) constraint не создавал. Добавлен
+    в модель тем же `Index(..., unique=True, postgresql_where=..., sqlite_where=...)`.
+  - `_create_job_if_absent` теперь ловит `IntegrityError` на `commit()` как no-op
+    (rollback + `return None`) — закрывает TOCTOU-гонку между SELECT и INSERT.
+  - Тесты (`tests/services/test_job_detection.py`): `test_full_screening_enqueues_for_all_course_applications`,
+    `test_full_screening_does_not_duplicate_pending_job`,
+    `test_concurrent_create_job_if_absent_no_duplicate` (два потока, разные `Session`
+    на файловой SQLite, барьер между SELECT и INSERT — воспроизводит реальную гонку).
+  - `uv run pytest tests/` — 197 passed.
+
+Не сделано в рамках этого шага (не входит в объём — другой репозиторий): вызов из
+фонового обработчика/`POST vacancy-profile/` в `sfera_backend`/`FullSphera` — см.
+step-E15-04.

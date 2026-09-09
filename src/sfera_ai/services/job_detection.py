@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session as PlatformSession
 
@@ -24,8 +25,11 @@ def _create_job_if_absent(
     session: Session, *, candidate_profile_id: int, reason: str, course_id: int | None = None,
 ) -> AIProcessingJob | None:
     """Partial UniqueConstraint (candidate_profile, course, reason) WHERE status IN
-    (PENDING, PROCESSING) защищает от гонки между процессами; эта проверка — та же
-    защита на уровне приложения, без похода в БД дважды на конфликте."""
+    (PENDING, PROCESSING) защищает от гонки между процессами (миграция 0004) — SELECT
+    ниже избегает похода в БД дважды в общем случае, но под конкурентным вызовом (два
+    процесса проходят SELECT одновременно) решает именно constraint: `IntegrityError`
+    на INSERT второго процесса перехватывается как no-op (step-E15-02, риск найден
+    архитектурным ревью 2026-09-08)."""
     existing = session.scalar(
         select(AIProcessingJob).where(
             AIProcessingJob.candidate_profile_id == candidate_profile_id,
@@ -38,7 +42,11 @@ def _create_job_if_absent(
         return None
     job = AIProcessingJob(candidate_profile_id=candidate_profile_id, reason=reason, course_id=course_id)
     session.add(job)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return None
     session.refresh(job)
     return job
 
@@ -87,6 +95,32 @@ def enqueue_fit_recalc_for_course(session: Session, course_id: int) -> list[AIPr
         job = _create_job_if_absent(
             session, candidate_profile_id=candidate_profile_id,
             reason="VACANCY_PROFILE_CHANGED", course_id=course_id,
+        )
+        if job is not None:
+            created.append(job)
+    return created
+
+
+def enqueue_full_screening_for_course(session: Session, platform_base, course_id: int) -> list[AIProcessingJob]:
+    """docs/superpowers/specs/2026-09-08-candidate-screening-modal-design.md, «Новая
+    сервисная функция» — HR правит текст портрета вакансии → ставит `AIProcessingJob`
+    на всех кандидатов курса, включая тех, кто ещё ни разу не анализировался (в отличие
+    от `enqueue_fit_recalc_for_course`, который трогает только уже проанализированных).
+    По образцу перебора `Application` из `run_full_course_screening.py` (E10-01).
+    Дедуп и защита от гонки — как везде, через `_create_job_if_absent`."""
+    Application = platform_base.classes.courses_application
+    with PlatformSession(platform_base.engine) as platform_session:
+        application_ids = platform_session.scalars(
+            select(Application.id).where(Application.course_id == course_id)
+        ).all()
+
+    created: list[AIProcessingJob] = []
+    for application_id in application_ids:
+        profile = resolve_or_create_candidate_profile(
+            session, platform_base=platform_base, application_id=application_id,
+        )
+        job = _create_job_if_absent(
+            session, candidate_profile_id=profile.id, reason="BACKFILL", course_id=course_id,
         )
         if job is not None:
             created.append(job)
