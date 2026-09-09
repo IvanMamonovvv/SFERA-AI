@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 from fastapi import HTTPException, Request
 from sqlalchemy import Engine
@@ -35,8 +35,10 @@ def get_s3_bucket(request: Request) -> str:
     return request.app.state.s3_bucket
 
 
-def resolve_course_or_404(platform_engine: Engine, course_uuid: str) -> tuple[int, object]:
-    platform_base = reflect_platform_tables(platform_engine, tables=API_READ_TABLES)
+def resolve_course_or_404(
+    platform_engine: Engine, course_uuid: str, *, tables: Sequence[str] = API_READ_TABLES
+) -> tuple[int, object]:
+    platform_base = reflect_platform_tables(platform_engine, tables=tables)
     course_id = resolve_course_id(platform_base, course_uuid)
     if course_id is None:
         raise HTTPException(status_code=404, detail="course not found")
