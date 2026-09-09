@@ -1,6 +1,6 @@
 # Шаг E15-06 — Проксирующие endpoint'ы в `sfera_backend`
 
-**Статус:** TODO
+**Статус:** DONE
 **Слой:** Backend (`sfera_backend`) · **Зависит от:** E15-02, E15-03, E15-04, E15-05
 **Репозиторий:** `sfera_backend` — требует отдельного явного разрешения владельца
 перед стартом (`CLAUDE.md`), как и весь эпик E14.
@@ -50,4 +50,34 @@ python manage.py test courses -k screening
 
 ## Журнал
 
-- (не начато — ждёт отдельного разрешения владельца на правку `sfera_backend`)
+- `2026-09-09` — реализовано по явному разрешению владельца, вместе с E15-07
+  (клиент — зависимость этого шага) в одной сессии. Новый модуль
+  `sfera_backend/courses/sfera_ai_proxy_views.py` (не добавлял в уже большой
+  `views.py` — план допускал отдельный модуль) — три `APIView`:
+  `CandidateScreeningListProxyView` (`GET`), `VacancyProfileProxyCreateView`
+  (`POST`), `CandidatesExportProxyView` (`POST`, отдаёт zip как
+  `HttpResponse`). Все три — `[IsAuthenticated, CourseCandidatesManagementPermission]`
+  (тот же класс, что уже защищает «Выгрузить архив»), курс резолвится через
+  существующий `get_demonstration_course_or_404` (импортирован из
+  `courses.views`, не продублирован). Вызов SFERA-AI — только через клиент
+  E15-07 (`integrations.sfera_ai.client`), не напрямую `requests`. `created_by_id`
+  в `vacancy-profile` берётся из `request.user.id`, не из тела запроса (не
+  доверяем клиенту). `SferaAiError` → `502` при `status_code=None` (сеть/таймаут),
+  иначе статус SFERA-AI пробрасывается как есть (`_sfera_ai_error_response`).
+  Маршруты — `v1/courses/<course_uuid>/ai-analysis/{candidates/screening,
+  vacancy-profile,export}/` в `api/urls.py`, рядом с `candidate-archive-jobs`
+  (не в `courses/urls.py` — такого файла в проекте нет, все маршруты собраны в
+  `api/urls.py`, что расходится с текстом плана «courses/urls.py», сверено по
+  факту). `drf_spectacular`: добавлен `responses=OpenApiTypes.OBJECT`/`BINARY` на
+  все три view — без них `manage.py spectacular` давал 2 новые ошибки
+  «unable to guess serializer» (APIView без `serializer_class`), сейчас 0 новых
+  (8 ошибок/1 уникальная — все pre-existing, не от этой правки). Тесты — новый
+  `courses/tests/test_sfera_ai_proxy_views.py` (13: своя компания admin/HR
+  проходит и получает проксированный ответ/zip, чужая компания → 403, кандидат
+  → 403, неизвестный курс → 404, `SferaAiError(status_code=None)` → 502,
+  `SferaAiError(status_code=404)` → 404 пробрасывается, `requirements`/
+  `candidate_profile_ids` отсутствуют в теле → 400) — SFERA-AI вызовы мокаются
+  (`courses.sfera_ai_proxy_views.fetch_screening_candidates` и т.д.), реального
+  похода к сервису в этих тестах нет (он покрыт `test_client.py`, E15-07).
+  `manage.py test courses` — 206/206 зелёных, регрессий нет. Не закоммичено
+  (рабочая копия `sfera_backend`) — ждёт решения владельца по коммиту/PR.

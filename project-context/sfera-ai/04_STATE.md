@@ -4,7 +4,28 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E15-05**
+**Последнее обновление:** `2026-09-09` (новое) — шаги **E15-07** (HTTP-клиент к
+SFERA-AI + секрет) и **E15-06** (проксирующие endpoint'ы) выполнены в одной сессии
+по явному разрешению владельца, код в `sfera_backend`. E15-07: новый
+`integrations/sfera_ai/client.py` — module-level функции без OAuth (по образцу
+`integrations/wazzup/client.py`), заголовок `X-BFF-Shared-Secret` на каждый запрос,
+`SferaAiError(status_code=...)` различает сетевую ошибку (`None`) от HTTP-ошибки
+SFERA-AI. Настройки `SFERA_AI_BASE_URL` (default `http://ai-service:8000`),
+`SFERA_AI_SHARED_SECRET`, `SFERA_AI_REQUEST_TIMEOUT` в `settings.py` + `.env.example`
+(владелец подтвердил отдельно). E15-06: новый `courses/sfera_ai_proxy_views.py`
+(не в уже большом `views.py`) — три `APIView` (`GET .../candidates/screening/`,
+`POST .../vacancy-profile/`, `POST .../export/`), все три —
+`CourseCandidatesManagementPermission` (тот же класс, что «Выгрузить архив»),
+`created_by_id` берётся из `request.user`, не из тела запроса. Маршруты в
+`api/urls.py` (не `courses/urls.py` — такого файла в проекте нет, план ошибочно
+называл его). `drf_spectacular`: добавлен `responses=` на все три view — без него
+2 новые ошибки схемы «unable to guess serializer». Тесты: `test_client.py` (6) +
+`test_sfera_ai_proxy_views.py` (13, SFERA-AI-вызовы мокаются) — `manage.py test
+courses` 206/206, `manage.py test integrations.sfera_ai` 6/6. Не закоммичено
+(рабочая копия `sfera_backend`) — ждёт решения владельца по коммиту/PR. Детали —
+журналы `step-E15-07-sfera-ai-client.md` / `step-E15-06-backend-proxy-endpoints.md`.
+
+Предыдущее: шаг **E15-05**
 (экспорт проставляет `CandidateVacancyTransfer`) выполнен. `build_candidates_export_archive`
 (`services/export/archive.py`) вызывает `mark_candidate_transferred` (E15-01) сразу после
 успешного `render_ai_card_pdf` для кандидата — до сбора resume/video, т.к. transfer не
@@ -434,11 +455,10 @@ LLM summary, воркер) пока не реализованы — не бло�
 Открыт только один пункт DoD E14-10 — проверка на staging на реальном
 `TranscriptionJob(DONE)` (ждёт своего момента, не блокирует остальную работу).
 
-**Эпик E15 заведён** (2026-09-09, «Обработка кандидатов») — план готов
-(`epics/E15-candidate-screening-modal/`), реализация не начата, ждёт «начинай» от
-владельца. Первые доступные без ограничений шаги — блок A (E15-01…E15-05, свой
-репозиторий SFERA-AI); блок B/C (E15-06…E15-08) — отдельное разрешение на каждый шаг
-перед стартом.
+**Эпик E15** (2026-09-09, «Обработка кандидатов») — блок A (E15-01…E15-05, свой
+репозиторий SFERA-AI) и блок B (E15-06/07, `sfera_backend`) выполнены. Остался
+только **E15-08** (HR UI модалка, код в `SPHERA`) — отдельное разрешение владельца
+перед стартом, как и для 06/07.
 
 **Эпик E13 полностью завершён** (E13-01, E13-02, 2026-09-02). Полный пересчёт
 `course_id=39` (90 кандидатов, с реальным учётом резюме через тунели) выполнен на
@@ -501,7 +521,12 @@ LLM summary, воркер) пока не реализованы — не бло�
 | E14-10 | Change detection на видео-транскрипт (`SFERA-AI`, свой репозиторий) (`step-E14-10-change-detection-video.md`) | DONE (код+тесты; staging-проверка на реальном TranscriptionJob(DONE) — отдельно) | 2026-09-09 |
 | E15-01 | Модель `CandidateVacancyTransfer` + upsert-сервис (`step-E15-01-transfer-model.md`) | DONE | 2026-09-09 |
 | E15-02 | `enqueue_full_screening_for_course` (`step-E15-02-enqueue-full-screening.md`) | DONE | 2026-09-09 |
-| E15-03…08 | «Обработка кандидатов» — модалка HR-скрининга (SFERA-AI + `sfera_backend` + `SPHERA`, план — `epics/E15-candidate-screening-modal/`) | TODO | — |
+| E15-03 | `GET .../candidates/screening/` (`step-E15-03-screening-endpoint.md`) | DONE | 2026-09-09 |
+| E15-04 | `POST vacancy-profile/` запускает полный скрининг курса в фоне (`step-E15-04-vacancy-profile-trigger.md`) | DONE | 2026-09-09 |
+| E15-05 | Экспорт проставляет `CandidateVacancyTransfer` (`step-E15-05-export-transfer-mark.md`) | DONE | 2026-09-09 |
+| E15-07 | HTTP-клиент к SFERA-AI + секрет, код в `sfera_backend` (`step-E15-07-sfera-ai-client.md`) | DONE (код, не закоммичено) | 2026-09-09 |
+| E15-06 | Проксирующие endpoint'ы, код в `sfera_backend` (`step-E15-06-backend-proxy-endpoints.md`) | DONE (код, не закоммичено) | 2026-09-09 |
+| E15-08 | HR UI модалка, код в `SPHERA` (`step-E15-08-hr-ui-modal.md`) | TODO | — |
 
 ## Журнал (дополнять, не стирать)
 
