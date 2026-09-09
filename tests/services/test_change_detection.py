@@ -5,11 +5,14 @@ from sfera_ai.platform_db import reflect_platform_tables, CHANGE_DETECTION_TABLE
 from sfera_ai.services.change_detection import needs_profile_rebuild
 
 
-def _platform_base(*, application=None, progress=None, answers=(), hh_negotiation=None):
+def _platform_base(
+    *, application=None, progress=None, answers=(), hh_negotiation=None, transcription_jobs=()
+):
     """application: (id, candidate_id, course_id, modified_at) | None
     progress: modified_at str | None
     answers: [(id, attempt_id)]
-    hh_negotiation: (id, modified_at, hh_resume_id) | None"""
+    hh_negotiation: (id, modified_at, hh_resume_id) | None
+    transcription_jobs: [(answer_id, status, finished_at str | None)]"""
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as conn:
         conn.exec_driver_sql(
@@ -30,6 +33,10 @@ def _platform_base(*, application=None, progress=None, answers=(), hh_negotiatio
             "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, "
             "modified_at DATETIME, hh_resume_id TEXT)"
         )
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_transcriptionjob (id INTEGER PRIMARY KEY, answer_id INTEGER, "
+            "status TEXT, finished_at DATETIME)"
+        )
         if application is not None:
             app_id, candidate_id, course_id, modified_at = application
             conn.exec_driver_sql(
@@ -47,6 +54,12 @@ def _platform_base(*, application=None, progress=None, answers=(), hh_negotiatio
             for answer_id, attempt_id in answers:
                 conn.exec_driver_sql(
                     f"INSERT INTO testchecks_answer (id, attempt_id) VALUES ({answer_id}, {attempt_id})"
+                )
+            for answer_id, status, finished_at in transcription_jobs:
+                finished_sql = f"'{finished_at}'" if finished_at is not None else "NULL"
+                conn.exec_driver_sql(
+                    f"INSERT INTO testchecks_transcriptionjob (answer_id, status, finished_at) "
+                    f"VALUES ({answer_id}, '{status}', {finished_sql})"
                 )
         if hh_negotiation is not None:
             hh_id, modified_at, hh_resume_id = hh_negotiation
@@ -72,6 +85,7 @@ def test_stale_when_answer_added_since_snapshot():
             "max_answer_id": 1,  # снепшот снят до второго ответа
             "hh_negotiation_updated_at": None,
             "hh_resume_id": None,
+            "video_transcript_finished_at": None,
         },
     )
     assert needs_profile_rebuild(platform_base, profile) is True
@@ -91,6 +105,7 @@ def test_not_stale_when_snapshot_matches_current_state():
             "max_answer_id": 1,
             "hh_negotiation_updated_at": None,
             "hh_resume_id": None,
+            "video_transcript_finished_at": None,
         },
     )
     assert needs_profile_rebuild(platform_base, profile) is False
@@ -109,6 +124,30 @@ def test_boundary_hh_only_profile_without_application():
             "max_answer_id": None,
             "hh_negotiation_updated_at": "2026-08-20T10:00:00",
             "hh_resume_id": "hh-resume-1",
+            "video_transcript_finished_at": None,
         },
     )
     assert needs_profile_rebuild(platform_base, profile) is False
+
+
+def test_stale_when_video_transcript_finishes():
+    """E14-10 — готовность TranscriptionJob (PENDING → DONE) должна помечать профиль
+    как требующий пересборки, даже если остальные 5 полей снапшота не изменились."""
+    platform_base = _platform_base(
+        application=(7, 100, 5, "2026-08-20T10:00:00"),
+        progress="2026-08-20T10:00:00",
+        answers=[(1, 1)],
+        transcription_jobs=[(1, "DONE", "2026-09-01T12:00:00")],
+    )
+    profile = CandidateProfile(
+        application_id=7,
+        sources_snapshot={
+            "application_updated_at": "2026-08-20T10:00:00",
+            "progress_updated_at": "2026-08-20T10:00:00",
+            "max_answer_id": 1,
+            "hh_negotiation_updated_at": None,
+            "hh_resume_id": None,
+            "video_transcript_finished_at": None,  # снапшот снят до готовности транскрипта
+        },
+    )
+    assert needs_profile_rebuild(platform_base, profile) is True
