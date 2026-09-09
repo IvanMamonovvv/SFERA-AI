@@ -4,7 +4,19 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-09` (новое) — шаг **E14-10** (change detection на
+**Последнее обновление:** `2026-09-09` (новое) — полный аудит логики эпика E14
+(`plan-auditor`) нашёл race condition: retention guard (`clean_expired_videos`/
+`check_disk_pressure`, `sfera_backend/core/scheduler.py`) мог гоняться с воркером
+(`_process_job`) за один и тот же `TranscriptionJob` на границе 30-дневного лимита —
+`FAILED` мог лечь поверх уже готового `DONE` с сохранённым транскриптом, либо файл
+видео удалялся из-под ещё идущей обработки. Зафиксировано и сразу пофикшено шагом
+**E14-11** (`step-E14-11-retention-race-fix.md`) по явному разрешению владельца:
+retention guard пропускает джобы в `PROCESSING`, `_process_job` пишет финальный `DONE`
+через conditional `update(status=PROCESSING → DONE)` вместо безусловного `save()`.
+3 новых теста, `manage.py test testchecks core` — 60 passed, регрессий нет. Правка на
+диске в `sfera_backend`, **не закоммичена** — ждёт решения владельца по коммиту/PR.
+
+`2026-09-09` (предыдущее) — шаг **E14-10** (change detection на
 видео-транскрипт, свой репозиторий SFERA-AI) реализован. `compute_current_sources_snapshot()`
 (`services/change_detection.py`) дополнен 6-м полем `video_transcript_finished_at`
 (`MAX(TranscriptionJob.finished_at)` через join на `testchecks_answer`/`testchecks_testattempt`
