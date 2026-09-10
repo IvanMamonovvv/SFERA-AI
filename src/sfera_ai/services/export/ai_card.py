@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.resume_extract import ResumeExtract
-from sfera_ai.services.api_read import resolve_company_name_for_course
+from sfera_ai.services.api_read import (
+    resolve_candidate_platform_name,
+    resolve_company_name_for_course,
+    resolve_vacancy_title_for_course,
+)
 from sfera_ai.services.candidate_facts import pick_fact_value, resume_status
 
 # step-E12-01 — Helvetica (AFM) не поддерживает кириллицу, весь русский текст в PDF
@@ -139,10 +143,10 @@ def _fact_value(facts: list[dict[str, Any]], key: str) -> Any | None:
     return pick_fact_value(facts, key)
 
 
-def _strip_block(client_name: str, video_present: bool) -> Table:
+def _strip_block(strip_label: str, video_present: bool) -> Table:
     badge = "ВИДЕО ЕСТЬ" if video_present else "БЕЗ ВИДЕО"
     table = Table(
-        [[Paragraph(client_name, _STYLE_STRIP), Paragraph(badge, _STYLE_BADGE)]],
+        [[Paragraph(strip_label, _STYLE_STRIP), Paragraph(badge, _STYLE_BADGE)]],
         colWidths=[_PAGE_WIDTH * 0.7, _PAGE_WIDTH * 0.3],
     )
     table.setStyle(
@@ -171,10 +175,9 @@ def _header_block(full_name: str, facts: list[dict[str, Any]]) -> list[Any]:
 def _meta_bar(facts: list[dict[str, Any]]) -> Table | None:
     city = _fact_value(facts, "city")
     age = _fact_value(facts, "age")
+    experience_years = _fact_value(facts, "experience_years")
     industry = _fact_value(facts, "industry")
     sales_segment = _fact_value(facts, "sales_segment")
-    positions = _fact_value(facts, "positions")
-    position = positions[0] if isinstance(positions, list) and positions else None
     salary = _fact_value(facts, "salary_expectation")
 
     if city and age:
@@ -185,6 +188,8 @@ def _meta_bar(facts: list[dict[str, Any]]) -> Table | None:
         cell_city_age = f"{age} лет"
     else:
         cell_city_age = "—"
+
+    cell_experience = f"{experience_years} лет опыта" if experience_years else "—"
 
     if industry and sales_segment:
         cell_industry = f"{industry} · {sales_segment}"
@@ -197,8 +202,8 @@ def _meta_bar(facts: list[dict[str, Any]]) -> Table | None:
 
     cells = [
         cell_city_age,
+        cell_experience,
         cell_industry,
-        str(position) if position else "—",
         f"Ожидание: {salary}" if salary else "—",
     ]
     if all(cell == "—" for cell in cells):
@@ -366,7 +371,12 @@ def render_ai_card_pdf(
     ).scalars().all()
     resume_status_block = _resume_status_block(resume_status(resume_extracts))
 
-    full_name = candidate_display_name(candidate_profile_id, _latest_full_name(session, candidate_profile_id))
+    platform_name = (
+        resolve_candidate_platform_name(platform_base, candidate_profile_id) if platform_base is not None else None
+    )
+    full_name = candidate_display_name(
+        candidate_profile_id, platform_name or _latest_full_name(session, candidate_profile_id)
+    )
     confidence_ru = CONFIDENCE_RU.get(current.confidence, "—")
     recommendation_ru = RECOMMENDATION_RU.get(current.recommendation, current.recommendation)
     fit_score_str = f"{current.fit_score / 10:.1f}".replace(".", ",") if current.fit_score is not None else "—"
@@ -375,6 +385,8 @@ def render_ai_card_pdf(
     client_name = (
         resolve_company_name_for_course(platform_base, course_id) if platform_base is not None else None
     ) or _DEFAULT_CLIENT_NAME
+    vacancy_title = resolve_vacancy_title_for_course(platform_base, course_id) if platform_base is not None else None
+    strip_label = f"{client_name} {vacancy_title}" if vacancy_title else client_name
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -383,7 +395,7 @@ def render_ai_card_pdf(
     )
 
     card: list[Any] = [
-        _strip_block(client_name, video_present),
+        _strip_block(strip_label, video_present),
         Spacer(1, 0.3 * cm),
         *_header_block(full_name, facts),
         Spacer(1, 0.3 * cm),

@@ -52,6 +52,26 @@ def resolve_company_name_for_course(platform_base, course_id: int) -> str | None
         ).scalar_one_or_none()
 
 
+def resolve_candidate_platform_name(platform_base, candidate_profile_id: int) -> str | None:
+    """ФИО кандидата из `CustomUser.name` (`users_customuser`, PK = `candidate_profile_id` —
+    03_TDD.md, identity-модель) — источник для шапки PDF-карточки, не зависит от резюме
+    (в отличие от `_latest_full_name`): доступен, даже если резюме не удалось обработать."""
+    User = platform_base.classes.users_customuser
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.execute(select(User.name).where(User.id == candidate_profile_id)).scalar_one_or_none()
+
+
+def resolve_vacancy_title_for_course(platform_base, course_id: int) -> str | None:
+    """Название вакансии для шапки PDF-карточки — `VacancyCourseMapping.hh_vacancy_title`
+    (PLATFORM_AUDIT_REFERENCE.md, «2. Сущность кандидата»: вакансия = курс с привязанной
+    через `VacancyCourseMapping` HH-вакансией). None — mapping ещё не назначен курсу."""
+    Mapping = platform_base.classes.headhunter_vacancycoursemapping
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.execute(
+            select(Mapping.hh_vacancy_title).where(Mapping.course_id == course_id)
+        ).scalar_one_or_none()
+
+
 def resolve_company_slug_for_hh_negotiation(platform_base, hh_negotiation_id: int) -> str | None:
     """Для чистых HH-лидов (ещё не сконвертировавшихся в `Application`) компания
     резолвится через `HHNegotiationRecord.mapping` -> `VacancyCourseMapping.course` ->
