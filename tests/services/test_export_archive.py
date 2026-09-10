@@ -20,7 +20,7 @@ from sfera_ai.services.export.archive import build_candidates_export_archive
 
 TABLES = (
     "courses_application", "testchecks_testattempt", "testchecks_answer", "testchecks_transcriptionjob",
-    "courses_course", "companies_company",
+    "courses_course", "companies_company", "headhunter_vacancycoursemapping", "users_customuser",
 )
 COURSE_ID = 1
 
@@ -36,6 +36,11 @@ def _platform_base(*, video_answer=None, resume_answer=None, application_id=7, c
         )
         conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, name TEXT)")
         conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, company_id INTEGER)")
+        conn.exec_driver_sql(
+            "CREATE TABLE headhunter_vacancycoursemapping "
+            "(id INTEGER PRIMARY KEY, course_id INTEGER, hh_vacancy_title TEXT)"
+        )
+        conn.exec_driver_sql("CREATE TABLE users_customuser (id INTEGER PRIMARY KEY, name TEXT)")
         conn.exec_driver_sql(
             f"INSERT INTO courses_application (id, candidate_id) VALUES ({application_id}, {candidate_id})"
         )
