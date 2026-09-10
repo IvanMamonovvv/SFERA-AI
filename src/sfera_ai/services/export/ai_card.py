@@ -378,7 +378,9 @@ def render_ai_card_pdf(
     resume_status_block = _resume_status_block(resume_status(resume_extracts))
 
     platform_name = (
-        resolve_candidate_platform_name(platform_base, candidate_profile_id) if platform_base is not None else None
+        resolve_candidate_platform_name(platform_base, profile)
+        if platform_base is not None and profile is not None
+        else None
     )
     full_name = candidate_display_name(
         candidate_profile_id, platform_name or _latest_full_name(session, candidate_profile_id)

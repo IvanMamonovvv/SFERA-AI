@@ -30,19 +30,27 @@ def _resume_file(session: Session, platform_base, profile: CandidateProfile, *, 
 
 
 def _video_file(session: Session, platform_base, profile: CandidateProfile, *, s3_client, s3_bucket):
+    # видеофайл достаётся напрямую по Answer/Question.is_video_intro, тем же паттерном,
+    # что рабочий архивный сервис платформы (courses/candidates_archive_service.py) —
+    # НЕ через TranscriptionJob.status=="DONE": расшифровка (для AI-фактов) и сам файл
+    # видео — независимые вещи, файл лежит в S3 сразу после ответа. Раньше выгрузка
+    # видео ошибочно ждала транскрибацию — TranscriptionJob создаётся только для новых
+    # ответов после включения TRANSCRIBE_ENABLED, старые видео-ответы никогда её не
+    # получат без ручного backfill на платформе (баг найден владельцем 2026-09-10).
     candidate_id = get_candidate_id(platform_base, profile)
     if candidate_id is None:
         return {"available": False, "bytes": None, "answer_id": None}
 
     Answer = platform_base.classes.testchecks_answer
     TestAttempt = platform_base.classes.testchecks_testattempt
-    TranscriptionJob = platform_base.classes.testchecks_transcriptionjob
+    Question = platform_base.classes.testchecks_question
     with Session(platform_base.engine) as platform_session:
         answer = platform_session.scalar(
             select(Answer)
             .join(TestAttempt, Answer.attempt_id == TestAttempt.id)
-            .join(TranscriptionJob, TranscriptionJob.answer_id == Answer.id)
-            .where(TestAttempt.candidate_id == candidate_id, TranscriptionJob.status == "DONE")
+            .join(Question, Answer.question_id == Question.id)
+            .where(TestAttempt.candidate_id == candidate_id, Question.is_video_intro.is_(True))
+            .order_by(Answer.id.desc())
         )
     if answer is None or not answer.file:
         return {"available": False, "bytes": None, "answer_id": None}

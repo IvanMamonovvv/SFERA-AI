@@ -38,4 +38,6 @@ HH_RESUME_COMPANY_TABLES = (
     "courses_course",
     "companies_company",
 )
-EXPORT_TABLES = tuple(dict.fromkeys(API_READ_TABLES + CHANGE_DETECTION_TABLES + ("users_customuser",)))
+EXPORT_TABLES = tuple(
+    dict.fromkeys(API_READ_TABLES + CHANGE_DETECTION_TABLES + ("users_customuser", "testchecks_question"))
+)
