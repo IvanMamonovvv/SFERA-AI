@@ -8,7 +8,7 @@ from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.change_detection import get_candidate_id
-from sfera_ai.services.resume_extraction import run_resume_extraction
+from sfera_ai.services.resume_extraction import PROMPT_VERSION, run_resume_extraction
 from sfera_ai.services.resume_fetch import fetch_resume_bytes
 from sfera_ai.services.resume_text_extraction import TextExtractionError, extract_text
 
@@ -171,5 +171,28 @@ def requeue_failed_resumes(
             extract.attempts += 1
             extract.retry_after = now + backoff(extract.attempts)
         session.commit()
+
+    return rows
+
+
+def reprocess_stale_resume_extracts(
+    session: Session, *, llm_client: OpenRouterClient, candidate_profile_ids: list[int] | None = None,
+) -> list[ResumeExtract]:
+    """`ResumeExtract.status=DONE`, но `prompt_version` старее текущего
+    `resume_extraction.PROMPT_VERSION` — уже сохранённый `structured_data` посчитан
+    промптом, который мог не запрашивать поле (пример: `age` появился только в
+    `resume-extract-v2`), и никогда не переизвлекается заново сам по себе (E19-E22,
+    «баги после ре-обсчёта» — владелец нашёл пустые город/возраст в PDF-карточке
+    у кандидата, обработанного до деплоя фикса). Переиспользует уже закэшированный
+    `extract.raw_text` — HH/S3 не трогает, только повторный LLM-вызов."""
+    query = select(ResumeExtract).where(
+        ResumeExtract.status == "DONE", ResumeExtract.prompt_version != PROMPT_VERSION
+    )
+    if candidate_profile_ids is not None:
+        query = query.where(ResumeExtract.candidate_profile_id.in_(candidate_profile_ids))
+    rows = session.scalars(query).all()
+
+    for extract in rows:
+        run_resume_extraction(extract, session=session, llm_client=llm_client)
 
     return rows
