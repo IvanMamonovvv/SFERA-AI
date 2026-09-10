@@ -18,4 +18,6 @@ class VacancyProfile(TimestampMixin, Base):
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     requirements: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    portrait_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

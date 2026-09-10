@@ -470,6 +470,40 @@ verbatim из `vacancy_profile.requirements` ("опыт_B2B_продаж" вме
   `fit-scoring-v4`. Проверено (ревью-агент 2026-09-10): `criteria_scores` нигде не
   используется как программный идентификатор — переименование безопасно.
 
+### E23 — Портрет вакансии: обычный текст вместо JSON
+
+По прямому запросу владельца (2026-09-10): менеджер не должен знать про формат JSON — сейчас
+модалка «Обработка кандидатов» (E15) заставляет HR вручную писать JSON в
+`VacancyProfile.requirements`. LLM-конвертация текст→JSON уже существует
+(`services/vacancy_portrait.py::build_vacancy_requirements`), но подключена только к
+отдельному CLI (E10-02), не к HTTP API, которым пользуется фронтенд. Архитектурное ревью
+2026-09-10 нашло 2 блокера в исходном плане (учтены в шагах ниже): (1) прокси-слой
+`sfera_backend` тоже хардкодит `requirements: dict` и не пропустит новый формат без правки;
+(2) `create_vacancy_profile_version` должна принимать новые поля опционально — иначе ломает
+CLI `create`-сабкоманду (raw JSON, без портрета) и существующие тесты. Один эпик, шаги
+физически в трёх репозиториях (по паттерну E14/E15).
+
+**Блок A — SFERA-AI (свой репозиторий):**
+- [x] `epics/E23-vacancy-portrait-freetext/step-E23-01-model-columns.md` — колонки
+  `portrait_text`/`source_url` на `VacancyProfile` + Alembic-ревизия (`server_default=""`).
+- [x] `epics/E23-vacancy-portrait-freetext/step-E23-02-service-optional-kwargs.md` —
+  `create_vacancy_profile_version` принимает `portrait_text`/`source_url` опционально, не
+  ломая CLI `create` и текущие тесты.
+- [x] `epics/E23-vacancy-portrait-freetext/step-E23-03-api-text-to-llm.md` —
+  `POST /vacancy-profile/` принимает `portrait_text`(+`source_url`), вызывает
+  `build_vacancy_requirements`, 422 на невалидный LLM-ответ, `source_url` не дублируется
+  внутри `requirements`, `GET` отдаёт новые поля для предзаполнения формы.
+
+**Блок B — `sfera_backend` (другой репозиторий, разрешение получено 2026-09-10):**
+- [x] `epics/E23-vacancy-portrait-freetext/step-E23-04-backend-proxy-text.md` — прокси
+  `VacancyProfileProxyView`/`integrations/sfera_ai/client.py` пропускают
+  `portrait_text`/`source_url` вместо требования готового JSON `requirements`.
+
+**Блок C — `SPHERA` (фронтенд, разрешение получено 2026-09-10):**
+- [x] `epics/E23-vacancy-portrait-freetext/step-E23-05-frontend-plaintext-modal.md` —
+  модалка «Обработка кандидатов»: обычная текстовая форма портрета + опциональное поле
+  ссылки, без JSON.parse-валидации.
+
 ## Граф зависимостей
 
 E0 → E1, E2, E4
@@ -492,3 +526,4 @@ E5 → E19 (ретраи AIProcessingJob, весь код в SFERA-AI)
 E6, E19 → E20 (валидация criteria_scores)
 E9 → E21 (форматирование баллов в PDF, независим от E19/E20)
 E6 → E22 (читаемые названия критериев, независим от E19/E20/E21)
+E15 → E23 (портрет вакансии текстом вместо JSON; шаги в sfera_backend/SPHERA — отдельное разрешение владельца на каждый)

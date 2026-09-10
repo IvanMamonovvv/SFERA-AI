@@ -5,7 +5,7 @@ def test_vacancy_profile_has_expected_columns():
     columns = {c.name for c in VacancyProfile.__table__.columns}
     assert columns == {
         "id", "course_id", "version", "is_current", "requirements",
-        "notes", "created_by_id", "created_at", "updated_at",
+        "notes", "portrait_text", "source_url", "created_by_id", "created_at", "updated_at",
     }
 
 

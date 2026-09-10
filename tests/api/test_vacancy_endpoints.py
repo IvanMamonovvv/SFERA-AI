@@ -106,13 +106,14 @@ def test_get_vacancy_profile_returns_404_when_no_current_version():
 
 
 def test_post_vacancy_profile_creates_first_version():
-    client = _client(_write_engine())
+    llm_client = _StubLLMClient(content='{"skills": ["python"]}')
+    client = _client(_write_engine(), llm_client=llm_client)
 
     with client:
         response = client.post(
             f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
             headers=_headers(),
-            json={"requirements": {"skills": ["python"]}, "notes": "junior", "created_by_id": 7},
+            json={"portrait_text": "Ищем python-разработчика", "notes": "junior", "created_by_id": 7},
         )
 
     assert response.status_code == 201
@@ -121,8 +122,55 @@ def test_post_vacancy_profile_creates_first_version():
     assert body["version"] == 1
     assert body["is_current"] is True
     assert body["requirements"] == {"skills": ["python"]}
+    assert body["portrait_text"] == "Ищем python-разработчика"
+    assert body["source_url"] is None
     assert body["notes"] == "junior"
     assert body["created_by_id"] == 7
+
+
+def test_post_vacancy_profile_with_source_url_strips_it_from_requirements():
+    llm_client = _StubLLMClient(content='{"skills": ["python"], "source_url": "https://example.com/vacancy"}')
+    client = _client(_write_engine(), llm_client=llm_client)
+
+    with client:
+        response = client.post(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
+            headers=_headers(),
+            json={"portrait_text": "Ищем python-разработчика", "source_url": "https://example.com/vacancy"},
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["source_url"] == "https://example.com/vacancy"
+    assert "source_url" not in body["requirements"]
+
+
+def test_post_vacancy_profile_invalid_llm_json_returns_422_and_does_not_create(monkeypatch):
+    import sfera_ai.api.routes.vacancy as vacancy_route
+
+    screening_calls: list = []
+    monkeypatch.setattr(
+        vacancy_route, "enqueue_full_screening_for_course", lambda *args, **kwargs: screening_calls.append(1)
+    )
+
+    write_engine = _write_engine()
+    llm_client = _StubLLMClient(content="not json")
+    client = _client(write_engine, llm_client=llm_client)
+
+    with client:
+        response = client.post(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
+            headers=_headers(),
+            json={"portrait_text": "Ищем python-разработчика"},
+        )
+
+        assert response.status_code == 422
+
+        session = sessionmaker(bind=write_engine)()
+        count = len(session.scalars(select(VacancyProfile)).all())
+        session.close()
+        assert count == 0
+        assert screening_calls == []
 
 
 def test_post_vacancy_profile_creates_new_version_and_supersedes_previous():
@@ -132,13 +180,13 @@ def test_post_vacancy_profile_creates_new_version_and_supersedes_previous():
     session.commit()
     session.close()
 
-    client = _client(write_engine)
+    client = _client(write_engine, llm_client=_StubLLMClient(content='{"a": 2}'))
 
     with client:
         response = client.post(
             f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
             headers=_headers(),
-            json={"requirements": {"a": 2}, "notes": "updated"},
+            json={"portrait_text": "обновлённый портрет", "notes": "updated"},
         )
 
         assert response.status_code == 201
@@ -159,7 +207,7 @@ def test_post_vacancy_profile_invalid_body_returns_422():
         response = client.post(
             f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
             headers=_headers(),
-            json={"notes": "missing requirements"},
+            json={"notes": "missing portrait_text"},
         )
 
     assert response.status_code == 422
@@ -278,13 +326,17 @@ def test_approve_feedback_already_applied_returns_409():
 
 def test_post_vacancy_profile_enqueues_full_screening_in_background():
     write_engine = _write_engine()
-    client = _client(write_engine, platform_engine=_platform_engine(application_count=3))
+    client = _client(
+        write_engine,
+        platform_engine=_platform_engine(application_count=3),
+        llm_client=_StubLLMClient(content='{"skills": ["python"]}'),
+    )
 
     with client:
         response = client.post(
             f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
             headers=_headers(),
-            json={"requirements": {"skills": ["python"]}, "notes": "junior"},
+            json={"portrait_text": "Ищем python-разработчика", "notes": "junior"},
         )
         assert response.status_code == 201
 
@@ -311,7 +363,11 @@ def test_post_vacancy_profile_response_not_blocked_by_full_screening(monkeypatch
     monkeypatch.setattr(vacancy_route, "enqueue_full_screening_for_course", _slow_enqueue)
 
     write_engine = _write_engine()
-    client = _client(write_engine, platform_engine=_platform_engine(application_count=5))
+    client = _client(
+        write_engine,
+        platform_engine=_platform_engine(application_count=5),
+        llm_client=_StubLLMClient(content='{"skills": ["python"]}'),
+    )
 
     try:
         with client:
@@ -319,7 +375,7 @@ def test_post_vacancy_profile_response_not_blocked_by_full_screening(monkeypatch
             response = client.post(
                 f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/",
                 headers=_headers(),
-                json={"requirements": {"skills": ["python"]}, "notes": "junior"},
+                json={"portrait_text": "Ищем python-разработчика", "notes": "junior"},
             )
             elapsed = time.monotonic() - start
 
