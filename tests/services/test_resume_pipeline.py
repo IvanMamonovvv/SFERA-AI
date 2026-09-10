@@ -12,6 +12,7 @@ from sfera_ai.services.resume_pipeline import (
     ensure_resume_processed,
     find_anketa_resume_answer_id,
     process_resume,
+    reprocess_stale_resume_extracts,
     requeue_failed_resumes,
 )
 
@@ -491,3 +492,88 @@ def test_requeue_failed_resumes_skips_rows_with_future_retry_after(tmp_engine):
 
         assert retried == []
         assert hh_client.get_resume_pdf.call_count == 0
+
+
+def test_reprocess_stale_resume_extracts_reruns_llm_for_outdated_prompt_version(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    llm_client = MagicMock()
+    llm_client.complete.return_value = LLMResult(
+        content='{"experience_years": 5, "city": "Нижний Новгород", "age": 35}',
+        provider="openrouter", model="test-model", tokens_input=100, tokens_output=20, latency_ms=350,
+    )
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="DONE", raw_text="Екатерина, 35 лет, Нижний Новгород",
+            structured_data={"experience_years": 5}, prompt_version="resume-extract-v1",
+        )
+        session.add(extract)
+        session.commit()
+
+        reprocessed = reprocess_stale_resume_extracts(session, llm_client=llm_client)
+
+        assert [r.id for r in reprocessed] == [extract.id]
+        session.refresh(extract)
+        assert extract.status == "DONE"
+        assert extract.structured_data == {"experience_years": 5, "city": "Нижний Новгород", "age": 35}
+        assert extract.prompt_version == "resume-extract-v2"
+        llm_client.complete.assert_called_once()
+        assert llm_client.complete.call_args.kwargs["messages"][1]["content"] == extract.raw_text
+
+
+def test_reprocess_stale_resume_extracts_skips_already_current_prompt_version(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    llm_client = MagicMock()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="DONE", raw_text="уже актуальный", structured_data={"city": "Москва"},
+            prompt_version="resume-extract-v2",
+        )
+        session.add(extract)
+        session.commit()
+
+        reprocessed = reprocess_stale_resume_extracts(session, llm_client=llm_client)
+
+        assert reprocessed == []
+        llm_client.complete.assert_not_called()
+
+
+def test_reprocess_stale_resume_extracts_filters_by_candidate_profile_ids(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    llm_client = MagicMock()
+    llm_client.complete.return_value = LLMResult(
+        content="{}", provider="openrouter", model="test-model",
+        tokens_input=10, tokens_output=5, latency_ms=100,
+    )
+
+    with Session(tmp_engine) as session:
+        profile_a = CandidateProfile(hh_negotiation_id=1)
+        profile_b = CandidateProfile(hh_negotiation_id=2)
+        session.add_all([profile_a, profile_b])
+        session.commit()
+        extract_a = ResumeExtract(
+            candidate_profile_id=profile_a.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="DONE", raw_text="a", structured_data={}, prompt_version="resume-extract-v1",
+        )
+        extract_b = ResumeExtract(
+            candidate_profile_id=profile_b.id, source_type="HH_RESUME", hh_resume_id="hh-2",
+            status="DONE", raw_text="b", structured_data={}, prompt_version="resume-extract-v1",
+        )
+        session.add_all([extract_a, extract_b])
+        session.commit()
+
+        reprocessed = reprocess_stale_resume_extracts(
+            session, llm_client=llm_client, candidate_profile_ids=[profile_a.id]
+        )
+
+        assert [r.id for r in reprocessed] == [extract_a.id]
+        llm_client.complete.assert_called_once()
