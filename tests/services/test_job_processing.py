@@ -37,6 +37,7 @@ def test_dry_run_flag_off_dispatches_profile_reason_to_candidate_facts(tmp_engin
     import sfera_ai.services.job_processing as job_processing
 
     calls = []
+    monkeypatch.setattr(job_processing, "ensure_resume_processed", lambda *a, **kw: None)
     monkeypatch.setattr(
         job_processing,
         "build_or_update_candidate_facts",
@@ -63,6 +64,12 @@ def test_dry_run_flag_off_dispatches_vacancy_reason_to_fit_scoring(tmp_engine, m
     from sfera_ai.models.vacancy_profile import VacancyProfile
 
     calls = []
+    monkeypatch.setattr(job_processing, "ensure_resume_processed", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: profile,
+    )
     monkeypatch.setattr(
         job_processing,
         "run_fit_scoring",
@@ -149,6 +156,130 @@ def test_pilot_course_id_skips_jobs_outside_pilot(tmp_engine, monkeypatch):
         assert processed[0].status == "PENDING"
         session.refresh(job)
         assert job.status == "PENDING"
+
+
+def test_ensure_resume_processed_called_before_branching_for_profile_reason(tmp_engine, monkeypatch):
+    """step-E18-01b DoD: ensure_resume_processed вызывается первой строкой
+    _run_real_ai_call, до ветвления по reason — для НЕ-VACANCY_REASONS."""
+    import sfera_ai.services.job_processing as job_processing
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "ensure_resume_processed",
+        lambda profile, **kw: calls.append("ensure_resume_processed"),
+    )
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: calls.append("facts") or profile,
+    )
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add(AIProcessingJob(candidate_profile_id=profile.id, reason="NEW_APPLICATION"))
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "DONE"
+        assert calls == ["ensure_resume_processed", "facts"]
+
+
+def test_ensure_resume_processed_called_before_facts_and_fit_scoring_for_vacancy_reason(
+    tmp_engine, monkeypatch
+):
+    """step-E18-01b DoD: для VACANCY_REASONS порядок вызовов — ensure_resume_processed
+    -> build_or_update_candidate_facts -> run_fit_scoring (facts staleness fix)."""
+    import sfera_ai.services.job_processing as job_processing
+    from sfera_ai.models.vacancy_profile import VacancyProfile
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing,
+        "ensure_resume_processed",
+        lambda profile, **kw: calls.append("ensure_resume_processed"),
+    )
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: calls.append("facts") or profile,
+    )
+    monkeypatch.setattr(
+        job_processing,
+        "run_fit_scoring",
+        lambda session, *, candidate_profile, vacancy_profile, llm_client: calls.append("fit_scoring"),
+    )
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        vacancy = VacancyProfile(course_id=42, version=1, is_current=True, requirements={})
+        session.add_all([profile, vacancy])
+        session.commit()
+        session.add(
+            AIProcessingJob(
+                candidate_profile_id=profile.id, course_id=42, reason="VACANCY_PROFILE_CHANGED"
+            )
+        )
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "DONE"
+        assert calls == ["ensure_resume_processed", "facts", "fit_scoring"]
+
+
+def test_dry_run_does_not_call_ensure_resume_processed(tmp_engine, monkeypatch):
+    """dry_run=True не делает ни одного реального HH/S3/LLM-вызова — ensure_resume_processed
+    вызывается только внутри _run_real_ai_call (исполняется лишь при not dry_run)."""
+    import sfera_ai.services.job_processing as job_processing
+
+    calls = []
+    monkeypatch.setattr(
+        job_processing, "ensure_resume_processed", lambda profile, **kw: calls.append(profile.id)
+    )
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add(AIProcessingJob(candidate_profile_id=profile.id, reason="NEW_APPLICATION"))
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=True)
+
+        assert processed[0].status == "DONE"
+        assert calls == []
+
+
+def test_resume_pipeline_exception_does_not_fail_job(tmp_engine, monkeypatch):
+    """Резюме-пайплайн сам ловит свои ошибки (ResumeExtract.status=FAILED, не бросает
+    исключение) — но если бы вдруг бросил, try/except в process_batch всё равно ловит
+    только реальные баги, джоба должна получить FAILED честно (не молча проглатываться)."""
+    import sfera_ai.services.job_processing as job_processing
+
+    def _boom(profile, **kw):
+        raise RuntimeError("неожиданный баг резюме-пайплайна")
+
+    monkeypatch.setattr(job_processing, "ensure_resume_processed", _boom)
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add(AIProcessingJob(candidate_profile_id=profile.id, reason="NEW_APPLICATION"))
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "FAILED"
+        assert "неожиданный баг" in processed[0].last_error
 
 
 def test_one_failing_job_does_not_block_others(tmp_engine):

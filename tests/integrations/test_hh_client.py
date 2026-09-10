@@ -80,3 +80,51 @@ def test_network_error_raises_hh_client_error():
     client = _client(handler)
     with pytest.raises(HHClientError, match="backend request failed"):
         client.get_resume_pdf(42, "acme")
+
+
+def test_remote_protocol_error_retries_once_then_succeeds():
+    """Сервер молча закрывает keep-alive соединение — httpx кидает RemoteProtocolError
+    на первой попытке; повторный запрос идёт по новому соединению и проходит."""
+    call_count = {"auth": 0, "pdf": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/token/":
+            call_count["auth"] += 1
+            return httpx.Response(200, json={"access": "tok-1"})
+        call_count["pdf"] += 1
+        if call_count["pdf"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+        return httpx.Response(200, content=b"%PDF-1")
+
+    client = _client(handler)
+    result = client.get_resume_pdf(42, "acme")
+
+    assert result == b"%PDF-1"
+    assert call_count["pdf"] == 2
+
+
+def test_remote_protocol_error_on_both_attempts_raises_hh_client_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/token/":
+            return httpx.Response(200, json={"access": "tok-1"})
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+
+    client = _client(handler)
+    with pytest.raises(HHClientError, match="backend request failed"):
+        client.get_resume_pdf(42, "acme")
+
+
+def test_non_transport_error_is_not_retried():
+    call_count = {"pdf": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/token/":
+            return httpx.Response(200, json={"access": "tok-1"})
+        call_count["pdf"] += 1
+        raise httpx.ConnectTimeout("timed out", request=request)
+
+    client = _client(handler)
+    with pytest.raises(HHClientError, match="backend request failed"):
+        client.get_resume_pdf(42, "acme")
+
+    assert call_count["pdf"] == 1

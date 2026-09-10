@@ -45,3 +45,6 @@ class Settings(BaseSettings):
     # step-E5-06 — TTL сырого PII резюме hh_negotiation-only лидов (не конвертировались
     # в Application); значение-заглушка, точное число — согласовать с владельцем перед прод.
     resume_pii_ttl_days: int = 90
+    # step-E18-03 — потолок автоматических ретраев ResumeExtract.status=FAILED (владелец
+    # подтвердил 2026-09-10); строки с attempts>=этого значения остаются FAILED навсегда.
+    resume_extract_max_attempts: int = 5

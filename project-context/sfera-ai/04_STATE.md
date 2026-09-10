@@ -4,7 +4,68 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-10` (новое) — заведён эпик **E17** («Точность
+**Последнее обновление:** `2026-09-10` (новое) — **Шаг C эпика E18 закрыт, эпик E18
+целиком DONE**: `step-E18-03-failed-resume-requeue.md` — открытые вопросы подтверждены
+владельцем (`resume_extract_max_attempts=5`, интервал cron 2 часа, отдельный от
+`run_tick`). Модель `ResumeExtract` — новые поля `attempts`/`retry_after` + индекс
+`ix_resume_extract_status_retry_after`. `services/resume_pipeline.py::requeue_failed_resumes`
+— выбирает `status=FAILED` с истёкшим backoff и `attempts < max_attempts`, ретраит через
+`process_resume` по уже сохранённым идентификаторам источника; успех — `retry_after=None`,
+повторный провал — `attempts+=1`/новый backoff (`job_processing.py::backoff`, локальный
+импорт внутри функции против циклического импорта). `config.py::resume_extract_max_attempts=5`.
+`scheduler.py::run_resume_retry` — новый cron `CronTrigger(hour="*/2", minute=0)`,
+не трогает `run_tick`/`run_requeue_stuck`/`run_pii_retention`. Миграция `0010`
+(`down_revision="0009"`) — upgrade/downgrade проверены на отдельной SQLite (staged на
+`0009` через `alembic stamp`, т.к. чистый chain с нуля падает на постгрес-специфичном raw
+SQL внутри самой 0009 — известное ограничение окружения, не связано с этим шагом);
+staging не даунгрейдился. 8 новых тестов, `uv run pytest` — 242 passed, регрессий нет.
+
+Предыдущее: `2026-09-10` — **Шаг B эпика E18 закрыт**:
+`step-E18-02-hh-client-retry.md` — `HHClient._get_with_retry` (зеркало
+`OpenRouterClient._request_with_retry`, `providers.py`), один повтор при
+`httpx.RemoteProtocolError` на оба вызова `self._http.get` в `_get` (первый запрос и повтор
+после 401). Не-транспортные ошибки (`ConnectTimeout` и т.п.) не повторяются. 4 новых теста
+в `tests/integrations/test_hh_client.py`, полный `uv run pytest` — 237 passed, регрессий нет.
+Публичный контракт `get_resume_pdf`/`HHClientError` не менялся. Шаг **C**
+(`step-E18-03-failed-resume-requeue.md`) не начат — ждёт отдельного явного «начинай».
+
+Предыдущее: `2026-09-10` — **Шаг A эпика E18 закрыт** (все 3 под-шага
+DONE): `01a` (вынос `ensure_resume_processed` в сервисный слой), `01b` (`_run_real_ai_call`/
+`process_batch` безусловно вызывают резюме-пайплайн + фикс facts staleness для
+`VACANCY_REASONS`), `01c` (`run_tick` строит `hh_client`/`s3_client`, рефлексит
+`RESUME_DETECTION_TABLES`). Код `01b`/`01c` уже был в рабочем дереве (незакоммичен) с
+предыдущей сессии — статус-файлы догнаны по факту, для `01c` добавлен недостающий тест
+`tests/test_scheduler.py`. `uv run pytest` — 234 passed. Автопайплайн резюме теперь реально
+работает в тике шедулера, не только через ручной CLI. Планы шагов B/C расписаны (по запросу
+владельца): **B** — `step-E18-02-hh-client-retry.md` (retry транспортных ошибок
+`HHClient.get_resume_pdf`, зеркало уже сделанного фикса OpenRouter `8e1363e`), **C** —
+`step-E18-03-failed-resume-requeue.md` (авто-ретрай `ResumeExtract.status=FAILED`, новые
+поля `attempts`/`retry_after` через Alembic-миграцию `0010`, есть открытые вопросы —
+`resume_extract_max_attempts`/интервал cron не подтверждены владельцем). Реализация ни
+одного из них не начата — оба ждут отдельного явного «начинай». Эпик E18 целиком
+**не закрыт** — B/C не реализованы.
+
+Предыдущее: `2026-09-10` — заведён эпик **E18**
+(«Шедулер реально обрабатывает резюме», `05_EPICS.md`, `epics/E18-scheduler-resume-pipeline/`).
+Найдено при расследовании бага retry OpenRouter (коммит `8e1363e`, уже в `main`, не задеплоен
+на VPS): автоматический тик шедулера (`scheduler.py::run_tick`) никогда не вызывает
+`process_resume` — резюме обрабатывается только ручным CLI. Три шага по приоритету
+(A — вшить вызов в `_run_real_ai_call`, без миграции; B — retry сетевых ошибок
+`HHClient.get_resume_pdf`; C — авто-ретрай `ResumeExtract.status=FAILED`, с Alembic-миграцией),
+каждый требует отдельного явного «начинай». Подробный план шага **A** расписан, разбит на
+3 под-шага (ревью-агент 2026-09-10 нашёл и владелец подтвердил фикс facts staleness):
+`step-E18-01a-resume-pipeline-service-extraction.md` (`ensure_resume_processed` — новая, вынесена
+из `cli/run_full_course_screening.py`), `step-E18-01b-job-processing-calls-resume-pipeline.md`
+(`_run_real_ai_call`/`process_batch` принимают `hh_client`/`s3_client`/`s3_bucket`; в ветке
+`VACANCY_REASONS` добавлен `build_or_update_candidate_facts` перед `run_fit_scoring`, иначе
+свежескачанное резюме не попадёт в `fit_score`), `step-E18-01c-scheduler-wiring.md` (`run_tick`
+строит `hh_client`/`s3_client`, рефлексит `RESUME_DETECTION_TABLES` вместо
+`CHANGE_DETECTION_TABLES`). Реализация **не начата** — ждёт «начинай» от владельца. Отдельно
+остаются нерасхваченными: фикс retry `8e1363e` не задеплоен на VPS, 34 старых `FAILED`-резюме
+course_id=39 не пересчитаны (id-список и команда для точечного пересчёта — в контексте задачи
+этой сессии, не дублируется сюда).
+
+Предыдущее: `2026-09-10` — заведён эпик **E17** («Точность
 карточки — резюме приоритетнее платформы + PDF-резюме», `05_EPICS.md`,
 `epics/E17-card-resume-accuracy/`). Владелец на реальной карточке (кандидат #2964,
 `resume_status=FAILED`) поднял два вопроса: (1) платформенные поля («Данные
@@ -526,6 +587,13 @@ LLM summary, воркер) пока не реализованы — не бло�
 решаются по ходу, на своих шагах реализации.
 
 ## Текущий следующий шаг
+
+**Эпик E18, шаг A** (шедулер вызывает `process_resume` — план расписан, 3 под-шага
+`step-E18-01a/b/c`). **`step-E18-01a` DONE** (2026-09-10). Следующий под-шаг —
+`step-E18-01b-job-processing-calls-resume-pipeline.md`, ждёт отдельного «начинай»
+владельца. Два независимых
+трека без пересечений по коду — можно продолжить либо этот, либо ручную проверку
+готового по коду эпика E17 (ниже), решает владелец.
 
 **Эпик E17 полностью завершён по коду** (2026-09-10, «Точность карточки — резюме
 приоритетнее платформы + PDF-резюме, визуальный стиль РТХ») — E17-01…06 DONE. Ветка
