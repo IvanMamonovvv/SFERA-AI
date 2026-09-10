@@ -3,6 +3,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from sfera_ai.api.deps import get_platform_engine, get_session, resolve_course_or_404
+from sfera_ai.config import Settings
 from sfera_ai.services.api_read import (
     get_candidate_detail,
     get_candidate_history,
@@ -23,7 +24,7 @@ def get_course_summary(
     platform_engine: Engine = Depends(get_platform_engine),
 ) -> dict:
     course_id, _ = resolve_course_or_404(platform_engine, course_uuid)
-    return get_summary(session, course_id)
+    return get_summary(session, course_id, max_attempts=Settings().ai_processing_job_max_attempts)
 
 
 @router.get("/candidates/")

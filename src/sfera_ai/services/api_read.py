@@ -143,10 +143,13 @@ def is_screening_enabled_for_course(platform_base, course_id: int) -> bool:
         )
 
 
-def get_summary(session: Session, course_id: int) -> dict[str, int]:
+def get_summary(session: Session, course_id: int, *, max_attempts: int) -> dict[str, int]:
     """03_TDD.md, «3. API / контракты» — агрегат по AIProcessingJob.status +
     CandidateVacancyAnalysis наличие для course. total — кандидаты, хоть раз затронутые
-    очередью или анализом для этого course (без похода в платформенные Application)."""
+    очередью или анализом для этого course (без похода в платформенные Application).
+    errors — все status=FAILED (включая ещё ретраящиеся); permanently_failed —
+    подмножество errors с attempts>=max_attempts, requeue_failed_jobs их больше не
+    подхватывает (step-E24-01, п.3 — HR-сигнал для окончательно потерянных кандидатов)."""
     touched_candidates = (
         select(AIProcessingJob.candidate_profile_id.label("candidate_profile_id"))
         .where(AIProcessingJob.course_id == course_id)
@@ -183,7 +186,60 @@ def get_summary(session: Session, course_id: int) -> dict[str, int]:
         )
         or 0
     )
-    return {"total": total, "processed": processed, "queued": queued, "errors": errors}
+    permanently_failed = (
+        session.scalar(
+            select(func.count())
+            .select_from(AIProcessingJob)
+            .where(
+                AIProcessingJob.course_id == course_id,
+                AIProcessingJob.status == "FAILED",
+                AIProcessingJob.attempts >= max_attempts,
+            )
+        )
+        or 0
+    )
+    return {
+        "total": total,
+        "processed": processed,
+        "queued": queued,
+        "errors": errors,
+        "permanently_failed": permanently_failed,
+    }
+
+
+def get_screening_progress(session: Session, course_id: int, *, max_attempts: int) -> dict[str, int]:
+    """step-E25-01 — прогресс backfill-скрининга курса после последнего пересохранения
+    портрета (снепшот на момент запроса, не realtime). remaining — только BACKFILL-джобы
+    course_id в PENDING/PROCESSING (другие reason намеренно не подмешиваются — счётчик про
+    хвост конкретной массовой переоценки, не про очередь целиком). failed — BACKFILL-джобы,
+    окончательно потерявшие попытки (attempts>=max_attempts), отдельным полем — решение
+    архитектурного ревью 2026-09-10 не прятать зависшие джобы под видом remaining=0."""
+    remaining = (
+        session.scalar(
+            select(func.count())
+            .select_from(AIProcessingJob)
+            .where(
+                AIProcessingJob.course_id == course_id,
+                AIProcessingJob.reason == "BACKFILL",
+                AIProcessingJob.status.in_(QUEUED_STATUSES),
+            )
+        )
+        or 0
+    )
+    failed = (
+        session.scalar(
+            select(func.count())
+            .select_from(AIProcessingJob)
+            .where(
+                AIProcessingJob.course_id == course_id,
+                AIProcessingJob.reason == "BACKFILL",
+                AIProcessingJob.status == "FAILED",
+                AIProcessingJob.attempts >= max_attempts,
+            )
+        )
+        or 0
+    )
+    return {"remaining": remaining, "failed": failed}
 
 
 _ANALYSIS_FIELDS = ("fit_score", "confidence", "data_completeness", "recommendation")

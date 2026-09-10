@@ -15,10 +15,15 @@ from sfera_ai.services.resume_pipeline import ensure_resume_processed
 
 BACKOFF_BASE_MINUTES = 5
 
-# Вакансийные reason'ы (E7, ещё не создаются детекцией) → E6-03 fit-scoring; все
-# остальные (включая MANUAL/BACKFILL) → E6-01 сборка/обновление фактов кандидата
-# (step-E6-04-queue-integration.md, п.1).
-VACANCY_REASONS = ("VACANCY_PROFILE_CHANGED", "FEEDBACK_APPLIED")
+# Вакансийные reason'ы → E6-03 fit-scoring (build_or_update_candidate_facts +
+# run_fit_scoring); все остальные (включая MANUAL) → только E6-01 сборка/обновление
+# фактов кандидата (step-E6-04-queue-integration.md, п.1). BACKFILL (первый отклик,
+# ни разу не анализировался) добавлен в step-E24-01 — раньше джоба закрывалась DONE
+# без реального fit_score, кандидат никогда не попадал в список подходящих
+# (найдено архитектурным ревью 2026-09-10 при разборе E25). course_id для BACKFILL
+# всегда явный (job_detection.py:_create_job_if_absent), обходной путь через
+# application_id (_job_course_id) для этой ветки не нужен.
+VACANCY_REASONS = ("VACANCY_PROFILE_CHANGED", "FEEDBACK_APPLIED", "BACKFILL")
 
 
 def backoff(attempts: int) -> timedelta:

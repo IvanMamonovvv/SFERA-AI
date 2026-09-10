@@ -7,11 +7,13 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from sfera_ai.api.deps import get_llm_client, get_platform_engine, get_session, resolve_course_or_404
+from sfera_ai.config import Settings
 from sfera_ai.models.vacancy_feedback import VacancyFeedback
 from sfera_ai.models.vacancy_memory import VacancyMemory
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.platform_db import IDENTITY_RESOLVER_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
+from sfera_ai.services.api_read import get_screening_progress
 from sfera_ai.services.feedback_interpretation import interpret_feedback
 from sfera_ai.services.job_detection import enqueue_full_screening_for_course
 from sfera_ai.services.vacancy_memory import FeedbackAlreadyAppliedError, approve_feedback
@@ -98,6 +100,16 @@ def get_vacancy_profile(
     if profile is None:
         raise HTTPException(status_code=404, detail="vacancy profile not found")
     return _serialize_vacancy_profile(profile)
+
+
+@router.get("/vacancy-profile/screening-progress/")
+def get_screening_progress_route(
+    course_uuid: str,
+    session: Session = Depends(get_session),
+    platform_engine: Engine = Depends(get_platform_engine),
+) -> dict:
+    course_id, _ = resolve_course_or_404(platform_engine, course_uuid)
+    return get_screening_progress(session, course_id, max_attempts=Settings().ai_processing_job_max_attempts)
 
 
 def _run_full_screening_background(engine: Engine, platform_engine: Engine, course_id: int) -> None:

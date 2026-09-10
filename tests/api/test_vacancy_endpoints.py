@@ -3,12 +3,13 @@ import time
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from sfera_ai.api.app import create_app
 from sfera_ai.db.base import Base
 from sfera_ai.models.ai_processing_job import AIProcessingJob
+from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.vacancy_feedback import VacancyFeedback
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.providers import LLMProviderError, LLMResult
@@ -397,3 +398,105 @@ def test_approve_feedback_unknown_id_returns_404():
         )
 
     assert response.status_code == 404
+
+
+def test_screening_progress_empty_queue_returns_zero():
+    client = _client(_write_engine())
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/screening-progress/", headers=_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"remaining": 0, "failed": 0}
+
+
+def test_screening_progress_counts_mixed_statuses():
+    write_engine = _write_engine()
+    with Session(write_engine) as session:
+        profiles = [CandidateProfile(application_id=i, sources_snapshot={}) for i in range(1, 6)]
+        session.add_all(profiles)
+        session.commit()
+        session.add_all(
+            [
+                AIProcessingJob(candidate_profile_id=profiles[0].id, course_id=COURSE_ID, reason="BACKFILL", status="PENDING"),
+                AIProcessingJob(candidate_profile_id=profiles[1].id, course_id=COURSE_ID, reason="BACKFILL", status="PROCESSING"),
+                AIProcessingJob(candidate_profile_id=profiles[2].id, course_id=COURSE_ID, reason="BACKFILL", status="DONE"),
+                AIProcessingJob(
+                    candidate_profile_id=profiles[3].id,
+                    course_id=COURSE_ID,
+                    reason="BACKFILL",
+                    status="FAILED",
+                    attempts=5,
+                ),
+                AIProcessingJob(
+                    candidate_profile_id=profiles[4].id,
+                    course_id=COURSE_ID,
+                    reason="BACKFILL",
+                    status="FAILED",
+                    attempts=1,
+                ),
+            ]
+        )
+        session.commit()
+    client = _client(write_engine)
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/screening-progress/", headers=_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"remaining": 2, "failed": 1}
+
+
+def test_screening_progress_isolated_by_course():
+    write_engine = _write_engine()
+    with Session(write_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add_all(
+            [
+                AIProcessingJob(candidate_profile_id=profile.id, course_id=COURSE_ID, reason="BACKFILL", status="PENDING"),
+                AIProcessingJob(candidate_profile_id=profile.id, course_id=999, reason="BACKFILL", status="PENDING"),
+            ]
+        )
+        session.commit()
+    client = _client(write_engine)
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/screening-progress/", headers=_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"remaining": 1, "failed": 0}
+
+
+def test_screening_progress_ignores_other_reasons():
+    write_engine = _write_engine()
+    with Session(write_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        session.add_all(
+            [
+                AIProcessingJob(candidate_profile_id=profile.id, course_id=COURSE_ID, reason="BACKFILL", status="PENDING"),
+                AIProcessingJob(
+                    candidate_profile_id=profile.id, course_id=COURSE_ID, reason="CANDIDATE_DATA_CHANGED", status="PENDING"
+                ),
+                AIProcessingJob(candidate_profile_id=profile.id, course_id=COURSE_ID, reason="MANUAL", status="PROCESSING"),
+            ]
+        )
+        session.commit()
+    client = _client(write_engine)
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/vacancy-profile/screening-progress/", headers=_headers()
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"remaining": 1, "failed": 0}

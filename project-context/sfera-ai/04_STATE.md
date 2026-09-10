@@ -4,7 +4,74 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-10` (новое) — шаг **E23-05**
+**Последнее обновление:** `2026-09-10` (новое) — шаг **E25-03**
+(`epics/E25-screening-progress-counter/step-E25-03-modal-progress-display.md`, другой репозиторий
+`SPHERA`, по явному «приступай к реализации» владельца на этот степ-файл) выполнен. **Эпик E25
+закрыт.** `model.ts`: новый тип `ScreeningProgressModel {remaining, failed}`.
+`candidate-screening-repository.ts`: `getScreeningProgress(courseUuid)` — `GET
+.../ai-analysis/vacancy-profile/screening-progress/` (контракт `{remaining, failed}` подтверждён
+по коду `sfera_backend`, E25-02 уже был `DONE`). `CandidateScreeningModal.tsx`: третий запрос в
+тот же `Promise.all` при открытии модалки — без отдельного эффекта/тайминга. Текст «Осталось
+обработать: N» / «Обработка завершена» под заголовком; `failed>0` — доп. пометка «(ошибок: N)»
+отдельным цветом. Без polling, обновление только при повторном открытии (аналогия E14-06).
+`npx tsc --noEmit`/`eslint` по трём файлам — чисто. Браузерная проверка пропущена — в текущей
+среде нет браузерного инструмента, владелец подтвердил пропуск (прецедент E23-05). Код не
+закоммичен (другой репозиторий — коммит/деплой отдельным шагом).
+
+Прошлое обновление `2026-09-10` — шаг **E25-02**
+(`epics/E25-screening-progress-counter/step-E25-02-backend-proxy-endpoint.md`, другой репозиторий
+`sfera_backend`, по явному «приступай к реализации» владельца на этот степ-файл) выполнен.
+`fetch_screening_progress(course_uuid)` в `integrations/sfera_ai/client.py` — GET
+`.../vacancy-profile/screening-progress/`, по образцу остальных функций клиента. Новый
+`ScreeningProgressProxyView` в `courses/sfera_ai_proxy_views.py` — `CourseCandidatesManagementPermission`,
+тот же паттерн, что три существующих screening-прокси. Маршрут `ai-analysis-screening-progress` в
+`api/urls.py`. Тесты добавлены в оба test-файла по образцу соседних кейсов (проксирование, права,
+404 неизвестного курса, 502 на сетевой ошибке). Docker локально не запущен — верификация прогнана
+на staging-сервере (`ssh sfera`, alias root/44122): файлы скопированы `docker cp` только в
+запущенный контейнер `sfera-staging-backend-1` (не в образ — временно, только ради теста, при
+рестарте контейнера откатится). `manage.py test courses integrations.sfera_ai` — 229 passed, без
+регрессий. `manage.py spectacular --validate` — exit 0, 16 ошибок/77 warnings, все старые
+(`CompanyViewSet`/`AnonymousUser` и т.п., не про новый view). Код не закоммичен и не задеплоен в
+staging-образ (деплой — отдельное действие).
+
+Прошлое обновление `2026-09-10` — шаг **E25-01**
+(`epics/E25-screening-progress-counter/step-E25-01-progress-endpoint.md`) выполнен. Новый роут
+`GET .../vacancy-profile/screening-progress/` (`api/routes/vacancy.py`, паттерн
+`resolve_course_or_404`) и сервис `get_screening_progress` (`services/api_read.py`, по образцу
+`get_summary`). Ответ `{"remaining": int, "failed": int}` — оба поля фильтруют
+`reason='BACKFILL'`: `remaining` = `PENDING`/`PROCESSING`, `failed` = `FAILED` с
+`attempts>=max_attempts`. Решение по зависшим FAILED-джобам — отдельное поле, не подмешивать в
+`remaining` (симметрично `permanently_failed` из E24). 4 новых теста в
+`test_vacancy_endpoints.py` (пустая очередь, смесь статусов, изоляция по `course_id`, игнор
+других `reason`). `uv run pytest` — 269 passed, без регрессий. Не закоммичено. Следующий шаг —
+**E25-02** (другой репозиторий, `sfera_backend`), требует отдельного «начинай» от владельца.
+
+Прошлое обновление `2026-09-10` — шаг **E24-01**
+(`epics/E24-backfill-fit-scoring-bug/step-E24-01-backfill-runs-fit-scoring.md`) выполнен.
+`"BACKFILL"` добавлен в `VACANCY_REASONS` (`job_processing.py:21`) — джоба с этим reason
+теперь реально вызывает `run_fit_scoring`, а не только пересобирает факты. Попутно (владелец
+подтвердил «чинить сейчас» для п.3 плана): `get_summary` (`services/api_read.py`) — новый
+параметр `max_attempts`, новое поле ответа `permanently_failed` (подмножество `errors` с
+`attempts>=max_attempts`, которых `requeue_failed_jobs` больше не подхватывает) — отдельно от
+«ещё ретраящихся» FAILED. Роут `GET .../summary/` (`api/routes/candidates.py`) передаёт
+`Settings().ai_processing_job_max_attempts`. Тесты — новый
+`test_dry_run_flag_off_dispatches_backfill_reason_to_fit_scoring` (`test_job_processing.py`) и
+`test_summary_distinguishes_permanently_failed_from_retryable_errors` (`test_candidates_list.py`,
+существующие summary-тесты обновлены под новое поле). `uv run pytest` — 265 passed. Не
+закоммичено. Следующий шаг — **E25-01** (`epics/E25-screening-progress-counter/`), требует
+отдельного «начинай» от владельца.
+
+Попутно по прямому запросу владельца сделаны две мелкие текстовые правки в PDF-карточке
+(`services/export/ai_card.py`), без отдельного эпика/степ-файла: (1) футер — «SFERA |
+AI-анализ кандидата по данным резюме и платформы» → «SFERA | Анализ кандидата по данным
+резюме и платформы» (`ai_card.py:432`); (2) шапка карточки — раньше `strip_label` собирался
+как `f"{client_name} {vacancy_title}"` (например «Сфера Менеджер по продажам B2B — входящие
+заявки»), владелец попросил убрать название компании спереди, оставить только название
+вакансии — `strip_label = vacancy_title or client_name` (`ai_card.py:393-397`, `client_name`
+остаётся fallback'ом на случай отсутствующего `VacancyCourseMapping`). `uv run pytest
+tests/services/test_ai_card_export.py` — 15 passed, регрессий нет. Не закоммичено.
+
+Предыдущее: `2026-09-10` — шаг **E23-05**
 (модалка SPHERA: обычный текст вместо JSON; ДРУГОЙ репозиторий `FullSphera/SPHERA`, разрешение
 владельца от 2026-09-10) выполнен. `model.ts`: `VacancyProfileModel.requirements` →
 `portraitText`/`sourceUrl`. `candidate-screening-repository.ts`: `mapVacancyProfile` читает

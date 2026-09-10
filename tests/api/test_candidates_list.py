@@ -97,7 +97,13 @@ def test_summary_zero_for_course_with_no_data():
         )
 
     assert response.status_code == 200
-    assert response.json() == {"total": 0, "processed": 0, "queued": 0, "errors": 0}
+    assert response.json() == {
+        "total": 0,
+        "processed": 0,
+        "queued": 0,
+        "errors": 0,
+        "permanently_failed": 0,
+    }
 
 
 def test_summary_counts_jobs_and_analyses():
@@ -140,7 +146,56 @@ def test_summary_counts_jobs_and_analyses():
         )
 
     assert response.status_code == 200
-    assert response.json() == {"total": 2, "processed": 1, "queued": 1, "errors": 1}
+    assert response.json() == {
+        "total": 2,
+        "processed": 1,
+        "queued": 1,
+        "errors": 1,
+        "permanently_failed": 0,
+    }
+
+
+def test_summary_distinguishes_permanently_failed_from_retryable_errors():
+    """step-E24-01, п.3 — permanently_failed (attempts>=max_attempts, requeue_failed_jobs
+    их больше не подхватывает) отдельно от errors (все FAILED, включая ещё ретраящиеся).
+    Дефолт ai_processing_job_max_attempts=5 (config.py)."""
+    write_engine = _write_engine()
+    session = sessionmaker(bind=write_engine)()
+    profile1 = CandidateProfile(application_id=1)
+    profile2 = CandidateProfile(application_id=2)
+    session.add_all([profile1, profile2])
+    session.flush()
+    session.add_all(
+        [
+            AIProcessingJob(
+                candidate_profile_id=profile1.id, course_id=COURSE_ID, status="FAILED",
+                reason="MANUAL", attempts=2,
+            ),
+            AIProcessingJob(
+                candidate_profile_id=profile2.id, course_id=COURSE_ID, status="FAILED",
+                reason="MANUAL", attempts=5,
+            ),
+        ]
+    )
+    session.commit()
+    session.close()
+
+    client = _client(write_engine, _platform_engine())
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/summary/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total": 2,
+        "processed": 0,
+        "queued": 0,
+        "errors": 2,
+        "permanently_failed": 1,
+    }
 
 
 def test_summary_unknown_course_returns_404():
