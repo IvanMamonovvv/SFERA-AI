@@ -10,7 +10,7 @@ from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.providers import OpenRouterClient
 
-PROMPT_VERSION = "fit-scoring-v2"
+PROMPT_VERSION = "fit-scoring-v3"
 MODEL = "openai/gpt-4o-mini"
 
 _CONFIDENCE_CHOICES = {"LOW", "MEDIUM", "HIGH"}
@@ -18,7 +18,7 @@ _RECOMMENDATION_CHOICES = {
     "STRONG_MATCH", "POSSIBLE_MATCH", "WEAK_MATCH", "NOT_ENOUGH_DATA", "NOT_A_MATCH",
 }
 _LIST_FIELDS = (
-    "strengths", "risks", "gaps", "missing_information", "evidence",
+    "summary", "strengths", "risks", "gaps", "missing_information", "evidence",
     "contradictions", "interview_questions",
 )
 
@@ -40,9 +40,18 @@ _SYSTEM_PROMPT = (
     "следующими полями: fit_score (число 0-100 или null), data_completeness (число "
     "0-100), confidence (одно из LOW/MEDIUM/HIGH), recommendation (одно из "
     "STRONG_MATCH/POSSIBLE_MATCH/WEAK_MATCH/NOT_ENOUGH_DATA/NOT_A_MATCH), "
-    "summary (строка), strengths (список строк), risks (список строк), gaps (список "
-    "строк), missing_information (список строк), criteria_scores (объект строка->число), "
-    "evidence (список), contradictions (список), interview_questions (список строк)."
+    "summary (список из 3-5 отдельных предложений — JSON-массив строк, НЕ сплошной "
+    "текст: что по кандидату подтверждено фактами, что не указано в доступных "
+    "данных), strengths (список строк — каждый пункт с конкретным фактом из evidence: "
+    "дата, цифра или название компании/вуза, не общая формулировка вида «хороший "
+    "опыт»), risks (список строк), gaps (список строк), missing_information (список "
+    "строк), criteria_scores (объект строка->число по шкале 0-10 с шагом 0.5, либо "
+    "null для критерия, который нельзя оценить по доступным данным — НЕ 0-100), "
+    "evidence (список), contradictions (список строк — каждая формулировка готова "
+    "для менеджера как предупреждение, например «Не считать X доказательством Y без "
+    "подтверждения Z», а не просто констатация расхождения), interview_questions "
+    "(список строк — конкретные проверяемые вопросы для интервью по фактам "
+    "кандидата, не общие темы для обсуждения)."
 )
 
 
@@ -157,7 +166,7 @@ def run_fit_scoring(
         data_completeness=parsed["data_completeness"],
         confidence=parsed["confidence"],
         recommendation=parsed["recommendation"],
-        summary=parsed.get("summary", ""),
+        summary=parsed.get("summary", []),
         strengths=parsed.get("strengths", []),
         risks=parsed.get("risks", []),
         gaps=parsed.get("gaps", []),

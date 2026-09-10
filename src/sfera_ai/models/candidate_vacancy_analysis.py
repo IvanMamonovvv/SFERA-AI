@@ -10,7 +10,6 @@ from sqlalchemy import (
     JSON,
     Numeric,
     String,
-    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,7 +48,7 @@ class CandidateVacancyAnalysis(TimestampMixin, Base):
     data_completeness: Mapped[int] = mapped_column(Integer, nullable=False)
     confidence: Mapped[str] = mapped_column(String(16), nullable=False)
     recommendation: Mapped[str] = mapped_column(String(32), nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     strengths: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     risks: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     gaps: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)

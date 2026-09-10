@@ -39,6 +39,19 @@ def resolve_company_slug_for_course(platform_base, course_id: int) -> str | None
         ).scalar_one_or_none()
 
 
+def resolve_company_name_for_course(platform_base, course_id: int) -> str | None:
+    """Название компании-заказчика для брендинга шапки PDF-карточки (step-E17-06,
+    решение владельца 2026-09-10) — по образцу resolve_company_slug_for_course, но
+    `Company.name` вместо `Company.slug`. None — вызывающая сторона подставляет
+    fallback "SFERA"."""
+    Course = platform_base.classes.courses_course
+    Company = platform_base.classes.companies_company
+    with PlatformSession(platform_base.engine) as platform_session:
+        return platform_session.execute(
+            select(Company.name).join(Course, Course.company_id == Company.id).where(Course.id == course_id)
+        ).scalar_one_or_none()
+
+
 def resolve_company_slug_for_hh_negotiation(platform_base, hh_negotiation_id: int) -> str | None:
     """Для чистых HH-лидов (ещё не сконвертировавшихся в `Application`) компания
     резолвится через `HHNegotiationRecord.mapping` -> `VacancyCourseMapping.course` ->

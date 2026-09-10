@@ -15,12 +15,12 @@ _VALID_RESPONSE = {
     "data_completeness": 60,
     "confidence": "MEDIUM",
     "recommendation": "POSSIBLE_MATCH",
-    "summary": "Подходит частично",
-    "strengths": ["Python 5 лет"],
+    "summary": ["Подходит частично", "Опыт в Python подтверждён, опыт B2B не указан"],
+    "strengths": ["Python 5 лет (резюме)"],
     "risks": ["нет опыта B2B"],
     "gaps": [],
     "missing_information": [],
-    "criteria_scores": {"tech": 80},
+    "criteria_scores": {"tech": 8.0},
     "evidence": [],
     "contradictions": [],
     "interview_questions": ["Расскажите про опыт продаж"],
@@ -75,6 +75,23 @@ def test_creates_first_version_as_current(tmp_engine):
         assert analysis.candidate_profile_id == profile.id
         assert analysis.vacancy_profile_id == vacancy.id
         assert analysis.course_id == vacancy.course_id
+        assert isinstance(analysis.summary, list)
+        assert len(analysis.summary) == 2
+
+
+def test_non_list_summary_raises_and_writes_nothing(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile, vacancy = _make_profiles(session)
+        bad_response = {**_VALID_RESPONSE, "summary": "не список"}
+        llm_client = _StubLLMClient(result=_llm_result(json.dumps(bad_response)))
+
+        with pytest.raises(InvalidFitScoringResponse):
+            run_fit_scoring(
+                session, candidate_profile=profile, vacancy_profile=vacancy, llm_client=llm_client,
+            )
+
+        assert session.query(CandidateVacancyAnalysis).count() == 0
 
 
 def test_input_snapshot_has_all_three_components(tmp_engine):

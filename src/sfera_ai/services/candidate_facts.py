@@ -22,7 +22,16 @@ _SYSTEM_PROMPT = (
     "факта, value - его значение строкой, answer_id - id ответа-источника."
 )
 
-_RESUME_FACT_KEYS = ("experience_years", "positions", "companies", "salary_expectation", "phone_number", "city")
+_RESUME_FACT_KEYS = (
+    "experience_years",
+    "positions",
+    "companies",
+    "salary_expectation",
+    "phone_number",
+    "city",
+    "age",
+    "industry",
+)
 
 # E13-01 (решение владельца 2026-09-01) — приоритет источников при конфликте значений
 # одного ключа: резюме (HH_RESUME/ANKETA_FILE) > ответы анкеты (ANSWER) > видео (VIDEO).
