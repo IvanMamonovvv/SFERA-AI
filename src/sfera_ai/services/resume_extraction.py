@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.providers import LLMProviderError, OpenRouterClient
 
-PROMPT_VERSION = "resume-extract-v1"
+PROMPT_VERSION = "resume-extract-v2"
 MODEL = "openai/gpt-4o-mini"
 
 _SYSTEM_PROMPT = (
@@ -16,7 +16,10 @@ _SYSTEM_PROMPT = (
     "experience_years (число, общий стаж в годах), positions (список должностей), "
     "companies (список компаний), salary_expectation (строка или null), "
     "phone_number (строка, телефон кандидата, или null если не найден), "
-    "city (строка, город проживания кандидата, или null если не найден)."
+    "city (строка, город проживания кандидата, или null если не найден), "
+    "age (число, возраст кандидата, или null если не найден), "
+    "industry (строка, короткая метка сферы/индустрии последнего места работы, "
+    "например \"Химическое сырьё\", \"Техническая номенклатура\", или null если не найдена)."
 )
 
 _ERROR_TRUNCATE_LEN = 2000

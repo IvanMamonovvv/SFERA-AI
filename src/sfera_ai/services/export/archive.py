@@ -57,7 +57,7 @@ def build_candidates_export_archive(
             folder = _folder_name(candidate_profile_id, full_name)
             unavailable: list[str] = []
 
-            pdf = render_ai_card_pdf(session, candidate_profile_id, course_id)
+            pdf = render_ai_card_pdf(session, candidate_profile_id, course_id, platform_base)
 
             files = collect_export_files(
                 session, platform_base, candidate_profile_id,
