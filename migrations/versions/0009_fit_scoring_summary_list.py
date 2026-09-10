@@ -20,13 +20,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # step-E17-05 — старый server_default="" (Text, 0005) не кастуется автоматически
+    # в JSON вместе со сменой типа колонки (postgres валидирует default отдельно от
+    # USING) — падало DatatypeMismatch на staging. Дропаем default отдельным шагом.
+    op.execute("ALTER TABLE ai_candidate_vacancy_analysis ALTER COLUMN summary DROP DEFAULT")
     op.alter_column(
         "ai_candidate_vacancy_analysis",
         "summary",
         type_=sa.JSON(),
         existing_type=sa.Text(),
         existing_nullable=False,
-        server_default=None,
         postgresql_using="to_jsonb(summary)",
     )
 
@@ -41,3 +44,4 @@ def downgrade() -> None:
         existing_nullable=False,
         postgresql_using="summary #>> '{}'",
     )
+    op.execute("ALTER TABLE ai_candidate_vacancy_analysis ALTER COLUMN summary SET DEFAULT ''")
