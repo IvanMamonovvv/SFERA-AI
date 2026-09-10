@@ -47,3 +47,34 @@ def test_complete_network_error_raises_provider_error():
     client = _client(handler)
     with pytest.raises(LLMProviderError):
         client.complete(model="test-model", prompt_version="v1", messages=[])
+
+
+def test_complete_retries_once_after_stale_connection_drop():
+    """Наблюдалось в проде (04_STATE.md) — простаивающее keep-alive соединение
+    сервер закрывает молча, httpx кидает RemoteProtocolError на первой попытке
+    переиспользовать его; повторный запрос идёт по новому соединению и проходит."""
+    calls = {"count": 0}
+
+    def handler(request):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": '{"ok": true}'}}], "usage": {}},
+        )
+
+    client = _client(handler)
+    result = client.complete(model="test-model", prompt_version="v1", messages=[])
+
+    assert result.content == '{"ok": true}'
+    assert calls["count"] == 2
+
+
+def test_complete_gives_up_after_retry_exhausted():
+    def handler(request):
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.", request=request)
+
+    client = _client(handler)
+    with pytest.raises(LLMProviderError):
+        client.complete(model="test-model", prompt_version="v1", messages=[])

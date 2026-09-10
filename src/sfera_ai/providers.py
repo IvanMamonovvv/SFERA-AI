@@ -35,6 +35,24 @@ class OpenRouterClient:
         self._base_url = base_url.rstrip("/")
         self._http = http_client or httpx.Client(timeout=60.0)
 
+    def _request_with_retry(self, payload: dict) -> httpx.Response:
+        """Один повтор при RemoteProtocolError — httpx кидает его, когда пытается
+        переиспользовать keep-alive соединение, которое сервер уже закрыл молча
+        (наблюдалось в проде: 34/35 FAILED резюме — этот же обрыв, см. 04_STATE.md).
+        Retry идёт по новому соединению из пула, не по тому же самому."""
+        try:
+            return self._http.post(
+                f"{self._base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=payload,
+            )
+        except httpx.RemoteProtocolError:
+            return self._http.post(
+                f"{self._base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=payload,
+            )
+
     def complete(
         self, *, model: str, prompt_version: str, messages: list[dict],
         response_format: dict | None = None,
@@ -45,11 +63,7 @@ class OpenRouterClient:
 
         started = time.monotonic()
         try:
-            response = self._http.post(
-                f"{self._base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json=payload,
-            )
+            response = self._request_with_retry(payload)
         except httpx.HTTPError as exc:
             raise LLMProviderError(f"OpenRouter request failed: {exc}") from exc
         latency_ms = int((time.monotonic() - started) * 1000)
