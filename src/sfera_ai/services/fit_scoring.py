@@ -10,7 +10,7 @@ from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.vacancy_profile import VacancyProfile
 from sfera_ai.providers import OpenRouterClient
 
-PROMPT_VERSION = "fit-scoring-v3"
+PROMPT_VERSION = "fit-scoring-v4"
 MODEL = "openai/gpt-4o-mini"
 
 _CONFIDENCE_CHOICES = {"LOW", "MEDIUM", "HIGH"}
@@ -46,7 +46,11 @@ _SYSTEM_PROMPT = (
     "дата, цифра или название компании/вуза, не общая формулировка вида «хороший "
     "опыт»), risks (список строк), gaps (список строк), missing_information (список "
     "строк), criteria_scores (объект строка->число по шкале 0-10 с шагом 0.5, либо "
-    "null для критерия, который нельзя оценить по доступным данным — НЕ 0-100), "
+    "null для критерия, который нельзя оценить по доступным данным — НЕ 0-100; ключи "
+    "объекта — читаемые названия критериев на русском языке, слова через пробел, "
+    "с заглавной буквы, БЕЗ символа «_» и БЕЗ копирования сырого ключа из JSON "
+    "требований вакансии verbatim — переформулируй по смыслу требования, например "
+    "«Последний опыт» вместо «последний_опыт»), "
     "evidence (список), contradictions (список строк — каждая формулировка готова "
     "для менеджера как предупреждение, например «Не считать X доказательством Y без "
     "подтверждения Z», а не просто констатация расхождения), interview_questions "
@@ -103,8 +107,21 @@ def _parse_and_validate(content: str) -> dict[str, Any]:
         if not isinstance(parsed.get(field, []), list):
             raise InvalidFitScoringResponse(f"invalid {field}: expected list")
 
-    if not isinstance(parsed.get("criteria_scores", {}), dict):
+    criteria_scores = parsed.get("criteria_scores", {})
+    if not isinstance(criteria_scores, dict):
         raise InvalidFitScoringResponse("invalid criteria_scores: expected object")
+
+    for criterion, value in criteria_scores.items():
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise InvalidFitScoringResponse(
+                f"invalid criteria_scores[{criterion!r}]: {value!r}"
+            )
+        if not (0 <= value <= 10) or value * 2 != round(value * 2):
+            raise InvalidFitScoringResponse(
+                f"invalid criteria_scores[{criterion!r}]: {value!r}"
+            )
 
     return parsed
 

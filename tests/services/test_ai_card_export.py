@@ -7,7 +7,12 @@ from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.models.vacancy_profile import VacancyProfile
-from sfera_ai.services.export.ai_card import _fact_value, candidate_display_name, render_ai_card_pdf
+from sfera_ai.services.export.ai_card import (
+    _fact_value,
+    _format_criterion_score,
+    candidate_display_name,
+    render_ai_card_pdf,
+)
 
 
 def _make_vacancy_profile(session: Session, course_id: int) -> VacancyProfile:
@@ -15,6 +20,18 @@ def _make_vacancy_profile(session: Session, course_id: int) -> VacancyProfile:
     session.add(vacancy_profile)
     session.flush()
     return vacancy_profile
+
+
+def test_format_criterion_score_whole_number_no_trailing_zero():
+    assert _format_criterion_score(10.0) == "10/10"
+
+
+def test_format_criterion_score_fractional_kept():
+    assert _format_criterion_score(8.5) == "8,5/10"
+
+
+def test_format_criterion_score_none():
+    assert _format_criterion_score(None) == "не оценено"
 
 
 def test_renders_pdf_for_full_data_candidate(tmp_engine):

@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 from sfera_ai.db.base import Base
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
-from sfera_ai.services.job_processing import backoff, process_batch, requeue_stuck_jobs
+from sfera_ai.services.job_processing import (
+    backoff,
+    process_batch,
+    requeue_failed_jobs,
+    requeue_stuck_jobs,
+)
 
 
 def test_empty_queue_no_ai_calls(tmp_engine):
@@ -325,7 +330,7 @@ def test_stuck_processing_job_requeued_to_pending(tmp_engine):
         session.add(job)
         session.commit()
 
-        requeued = requeue_stuck_jobs(session, threshold_hours=2)
+        requeued = requeue_stuck_jobs(session, threshold_hours=2, max_attempts=5)
 
         assert [j.id for j in requeued] == [job.id]
         session.refresh(job)
@@ -349,9 +354,116 @@ def test_fresh_processing_job_not_touched(tmp_engine):
         session.add(job)
         session.commit()
 
-        requeued = requeue_stuck_jobs(session, threshold_hours=2)
+        requeued = requeue_stuck_jobs(session, threshold_hours=2, max_attempts=5)
 
         assert requeued == []
         session.refresh(job)
         assert job.status == "PROCESSING"
         assert job.attempts == 0
+
+
+def test_stuck_job_exhausted_attempts_marked_failed_not_requeued(tmp_engine):
+    """step-E19-01 DoD: зависшая джоба с attempts>=max_attempts переводится в FAILED,
+    не requeue-ится повторно в PENDING."""
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        job = AIProcessingJob(
+            candidate_profile_id=profile.id,
+            reason="NEW_APPLICATION",
+            status="PROCESSING",
+            started_at=datetime.now(UTC) - timedelta(hours=3),
+            attempts=4,
+        )
+        session.add(job)
+        session.commit()
+
+        requeued = requeue_stuck_jobs(session, threshold_hours=2, max_attempts=5)
+
+        assert [j.id for j in requeued] == [job.id]
+        session.refresh(job)
+        assert job.status == "FAILED"
+        assert job.attempts == 5
+        assert job.finished_at is not None
+
+
+def test_failed_job_expired_backoff_requeued_to_pending(tmp_engine):
+    """step-E19-02 DoD: FAILED-джоба с истёкшим retry_after и attempts<max попадает
+    в обработку повторно."""
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        job = AIProcessingJob(
+            candidate_profile_id=profile.id,
+            reason="NEW_APPLICATION",
+            status="FAILED",
+            attempts=1,
+            retry_after=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        session.add(job)
+        session.commit()
+
+        requeued = requeue_failed_jobs(session, max_attempts=5)
+
+        assert [j.id for j in requeued] == [job.id]
+        session.refresh(job)
+        assert job.status == "PENDING"
+        assert job.retry_after is None
+
+
+def test_failed_job_exhausted_attempts_not_requeued(tmp_engine):
+    """step-E19-02 DoD: FAILED-джоба с attempts>=max НЕ попадает в обработку."""
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        job = AIProcessingJob(
+            candidate_profile_id=profile.id,
+            reason="NEW_APPLICATION",
+            status="FAILED",
+            attempts=5,
+            retry_after=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        session.add(job)
+        session.commit()
+
+        requeued = requeue_failed_jobs(session, max_attempts=5)
+
+        assert requeued == []
+        session.refresh(job)
+        assert job.status == "FAILED"
+
+
+def test_failed_job_with_open_conflict_not_requeued(tmp_engine):
+    """step-E19-02 DoD: FAILED-джоба той же тройки, что уже открытая PENDING —
+    не requeue-ится, IntegrityError не возникает."""
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        session.add(profile)
+        session.commit()
+        failed = AIProcessingJob(
+            candidate_profile_id=profile.id,
+            reason="NEW_APPLICATION",
+            status="FAILED",
+            attempts=1,
+            retry_after=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        open_job = AIProcessingJob(
+            candidate_profile_id=profile.id,
+            reason="NEW_APPLICATION",
+            status="PENDING",
+        )
+        session.add_all([failed, open_job])
+        session.commit()
+
+        requeued = requeue_failed_jobs(session, max_attempts=5)
+
+        assert requeued == []
+        session.refresh(failed)
+        assert failed.status == "FAILED"
