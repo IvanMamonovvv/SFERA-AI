@@ -48,3 +48,6 @@ class Settings(BaseSettings):
     # step-E18-03 — потолок автоматических ретраев ResumeExtract.status=FAILED (владелец
     # подтвердил 2026-09-10); строки с attempts>=этого значения остаются FAILED навсегда.
     resume_extract_max_attempts: int = 5
+    # step-E19-01 — потолок автоматических requeue зависшей (PROCESSING) AIProcessingJob;
+    # строки с attempts>=этого значения переводятся в FAILED вместо очередного requeue.
+    ai_processing_job_max_attempts: int = 5

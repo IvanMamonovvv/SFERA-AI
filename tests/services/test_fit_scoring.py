@@ -158,6 +158,50 @@ def test_invalid_enum_value_raises_and_writes_nothing(tmp_engine):
         assert session.query(CandidateVacancyAnalysis).count() == 0
 
 
+def test_criteria_scores_out_of_range_raises_and_writes_nothing(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile, vacancy = _make_profiles(session)
+        bad_response = {**_VALID_RESPONSE, "criteria_scores": {"tech": 100}}
+        llm_client = _StubLLMClient(result=_llm_result(json.dumps(bad_response)))
+
+        with pytest.raises(InvalidFitScoringResponse):
+            run_fit_scoring(
+                session, candidate_profile=profile, vacancy_profile=vacancy, llm_client=llm_client,
+            )
+
+        assert session.query(CandidateVacancyAnalysis).count() == 0
+
+
+def test_criteria_scores_off_step_raises_and_writes_nothing(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile, vacancy = _make_profiles(session)
+        bad_response = {**_VALID_RESPONSE, "criteria_scores": {"tech": 10.5}}
+        llm_client = _StubLLMClient(result=_llm_result(json.dumps(bad_response)))
+
+        with pytest.raises(InvalidFitScoringResponse):
+            run_fit_scoring(
+                session, candidate_profile=profile, vacancy_profile=vacancy, llm_client=llm_client,
+            )
+
+        assert session.query(CandidateVacancyAnalysis).count() == 0
+
+
+def test_criteria_scores_valid_half_step_or_none_accepted(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile, vacancy = _make_profiles(session)
+        good_response = {**_VALID_RESPONSE, "criteria_scores": {"tech": 8.5, "sales": None}}
+        llm_client = _StubLLMClient(result=_llm_result(json.dumps(good_response)))
+
+        analysis = run_fit_scoring(
+            session, candidate_profile=profile, vacancy_profile=vacancy, llm_client=llm_client,
+        )
+
+        assert analysis.criteria_scores == {"tech": 8.5, "sales": None}
+
+
 def test_provider_error_propagates_and_writes_nothing(tmp_engine):
     Base.metadata.create_all(tmp_engine)
     with Session(tmp_engine) as session:

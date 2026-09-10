@@ -12,7 +12,7 @@ from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.platform_db import RESUME_DETECTION_TABLES, reflect_platform_tables
 from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.job_detection import detect_and_enqueue
-from sfera_ai.services.job_processing import process_batch, requeue_stuck_jobs
+from sfera_ai.services.job_processing import process_batch, requeue_failed_jobs, requeue_stuck_jobs
 from sfera_ai.services.pii_retention import purge_expired_hh_lead_resumes
 from sfera_ai.services.resume_pipeline import requeue_failed_resumes
 
@@ -66,8 +66,25 @@ def run_requeue_stuck(settings: Settings) -> None:
     не завязан на тик detection+processing."""
     write_engine = make_write_engine(settings)
     with Session(write_engine) as session:
-        requeued = requeue_stuck_jobs(session, threshold_hours=settings.ai_stuck_job_threshold_hours)
+        requeued = requeue_stuck_jobs(
+            session,
+            threshold_hours=settings.ai_stuck_job_threshold_hours,
+            max_attempts=settings.ai_processing_job_max_attempts,
+        )
         logger.info("requeue: %d зависших джоб вернуто в PENDING", len(requeued))
+
+
+def run_ai_job_retry(settings: Settings) -> None:
+    """step-E19-02 — отдельный cron раз в 2 часа, ретраит AIProcessingJob.status=FAILED
+    с истёкшим backoff и attempts < max_attempts. Не завязан на run_tick/детекцию —
+    только флипает статус обратно в PENDING, реальный AI-вызов сделает следующий
+    тик process_batch."""
+    write_engine = make_write_engine(settings)
+    with Session(write_engine) as session:
+        retried = requeue_failed_jobs(
+            session, max_attempts=settings.ai_processing_job_max_attempts
+        )
+        logger.info("ai_job_retry: %d FAILED джоб возвращено в PENDING", len(retried))
 
 
 def run_resume_retry(settings: Settings) -> None:
@@ -131,6 +148,14 @@ def build_scheduler(settings: Settings | None = None) -> BackgroundScheduler:
     scheduler.add_job(
         run_requeue_stuck,
         CronTrigger(minute=0),  # раз в час, отдельно от получасового тика
+        args=[settings],
+        max_instances=1,
+    )
+    scheduler.add_job(
+        run_ai_job_retry,
+        # step-E19-02 — та же периодичность, что run_resume_retry (2ч), но офсет на
+        # minute=30, чтобы не биться с ним за тот же тик планировщика.
+        CronTrigger(hour="*/2", minute=30),
         args=[settings],
         max_instances=1,
     )

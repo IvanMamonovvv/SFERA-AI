@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session as PlatformSession
 
@@ -152,11 +152,14 @@ def process_batch(
     return jobs
 
 
-def requeue_stuck_jobs(session: Session, *, threshold_hours: int) -> list[AIProcessingJob]:
+def requeue_stuck_jobs(
+    session: Session, *, threshold_hours: int, max_attempts: int
+) -> list[AIProcessingJob]:
     """03_TDD.md, «6. Processing Queue» → «Зависшие PROCESSING» — контейнер мог упасть
     между `status="PROCESSING"` и закрытием джобы; отдельный часовой cron возвращает такие
     джобы в `PENDING` (не `FAILED` — не вина джобы) с инкрементом `attempts`, чтобы их
-    подхватил следующий тик `process_batch`."""
+    подхватил следующий тик `process_batch`. step-E19-01 — джоба, исчерпавшая
+    `max_attempts`, вместо очередного requeue переводится в `FAILED` окончательно."""
     threshold = datetime.now(UTC) - timedelta(hours=threshold_hours)
     stuck = session.scalars(
         select(AIProcessingJob).where(
@@ -166,9 +169,51 @@ def requeue_stuck_jobs(session: Session, *, threshold_hours: int) -> list[AIProc
     ).all()
 
     for job in stuck:
-        job.status = "PENDING"
         job.attempts += 1
         job.started_at = None
+        if job.attempts >= max_attempts:
+            job.status = "FAILED"
+            job.finished_at = datetime.now(UTC)
+        else:
+            job.status = "PENDING"
 
     session.commit()
     return stuck
+
+
+def requeue_failed_jobs(session: Session, *, max_attempts: int) -> list[AIProcessingJob]:
+    """step-E19-02 — отдельный периодический ретрай `AIProcessingJob.status=FAILED`
+    (по образцу `requeue_failed_resumes`/step-E18-03), не завязан на `run_tick`.
+    Строки с `attempts >= max_attempts` в выборку не попадают вообще — остаются FAILED
+    навсегда. Джобу с уже открытой (PENDING/PROCESSING) джобой той же тройки
+    `(candidate_profile_id, course_id, reason)` не requeue-им — конфликтует с partial
+    unique index `uq_processing_job_candidate_course_reason_open`; новая джоба и так
+    покроет пересчёт."""
+    now = datetime.now(UTC)
+    rows = session.scalars(
+        select(AIProcessingJob).where(
+            AIProcessingJob.status == "FAILED",
+            AIProcessingJob.attempts < max_attempts,
+            or_(AIProcessingJob.retry_after.is_(None), AIProcessingJob.retry_after <= now),
+        )
+    ).all()
+
+    requeued = []
+    for job in rows:
+        conflict = session.scalar(
+            select(AIProcessingJob.id).where(
+                AIProcessingJob.id != job.id,
+                AIProcessingJob.candidate_profile_id == job.candidate_profile_id,
+                AIProcessingJob.course_id == job.course_id,
+                AIProcessingJob.reason == job.reason,
+                AIProcessingJob.status.in_(("PENDING", "PROCESSING")),
+            )
+        )
+        if conflict is not None:
+            continue
+        job.status = "PENDING"
+        job.retry_after = None
+        requeued.append(job)
+
+    session.commit()
+    return requeued

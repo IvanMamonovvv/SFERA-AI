@@ -311,6 +311,12 @@ def _resume_status_block(status: str) -> Table | None:
     return table
 
 
+def _format_score_value(value: float) -> str:
+    if value == int(value):
+        return str(int(value))
+    return f"{value:.1f}".replace(".", ",")
+
+
 def _format_criterion_score(score: Any) -> str:
     if score is None:
         return "не оценено"
@@ -318,7 +324,7 @@ def _format_criterion_score(score: Any) -> str:
         value = float(score)
     except (TypeError, ValueError):
         return "не оценено"
-    return f"{value:.1f}/10".replace(".", ",")
+    return f"{_format_score_value(value)}/10"
 
 
 def _criteria_scores_table(criteria_scores: dict[str, Any]) -> Table:
@@ -379,7 +385,7 @@ def render_ai_card_pdf(
     )
     confidence_ru = CONFIDENCE_RU.get(current.confidence, "—")
     recommendation_ru = RECOMMENDATION_RU.get(current.recommendation, current.recommendation)
-    fit_score_str = f"{current.fit_score / 10:.1f}".replace(".", ",") if current.fit_score is not None else "—"
+    fit_score_str = _format_score_value(current.fit_score / 10) if current.fit_score is not None else "—"
     video_present = _has_video(facts)
     meta_bar = _meta_bar(facts)
     client_name = (
