@@ -48,6 +48,7 @@ def cmd_create_from_portrait(
     with Session(engine) as session:
         profile = create_vacancy_profile_version(
             session, course_id=course_id, requirements=requirements, notes=notes, created_by_id=None,
+            portrait_text=portrait_text, source_url=source_url,
         )
         print(json.dumps(_serialize(profile), ensure_ascii=False))
 

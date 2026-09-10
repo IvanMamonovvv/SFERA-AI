@@ -14,6 +14,8 @@ def create_vacancy_profile_version(
     requirements: dict[str, Any],
     notes: str,
     created_by_id: int | None,
+    portrait_text: str = "",
+    source_url: str | None = None,
 ) -> VacancyProfile:
     previous_current = session.scalar(
         select(VacancyProfile).where(VacancyProfile.course_id == course_id, VacancyProfile.is_current.is_(True))
@@ -32,6 +34,8 @@ def create_vacancy_profile_version(
         requirements=requirements,
         notes=notes,
         created_by_id=created_by_id,
+        portrait_text=portrait_text,
+        source_url=source_url,
     )
     session.add(new_profile)
     session.commit()

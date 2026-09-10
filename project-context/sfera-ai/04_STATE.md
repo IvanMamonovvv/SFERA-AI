@@ -4,7 +4,69 @@
 > Новый чат: читай сверху вниз, бери первый шаг со статусом `TODO`.
 
 **Проект/фича:** SFERA-AI — AI-анализ кандидатов, единственный инструмент этого репозитория
-**Последнее обновление:** `2026-09-10` (новое) — шаг **E22-01** (читаемые русские названия
+**Последнее обновление:** `2026-09-10` (новое) — шаг **E23-05**
+(модалка SPHERA: обычный текст вместо JSON; ДРУГОЙ репозиторий `FullSphera/SPHERA`, разрешение
+владельца от 2026-09-10) выполнен. `model.ts`: `VacancyProfileModel.requirements` →
+`portraitText`/`sourceUrl`. `candidate-screening-repository.ts`: `mapVacancyProfile` читает
+`portrait_text`/`source_url`, `saveVacancyProfile(courseUuid, portraitText, sourceUrl)` шлёт
+`{ portrait_text, source_url }` — контракт под E23-04 уже был готов на бэкенде. `CandidateScreeningModal.tsx`:
+убран клиентский `JSON.parse`, лейбл «Портрет вакансии» без «(JSON)», textarea — свободный текст,
+плейсхолдер-пример, новое поле «Ссылка на вакансию». Ошибка 422 от бэка уже доходила через
+`parseApiErrorPayload` в тост — доп. код не понадобился. `tsc --noEmit`/`eslint` по изменённым
+файлам — чисто (ручная проверка в браузере не запускалась, dev-сервер SPHERA не поднимался). Не
+закоммичено. Детали — журнал `epics/E23-vacancy-portrait-freetext/step-E23-05-frontend-plaintext-modal.md`.
+
+Предыдущее: `2026-09-10` — шаг **E23-04**
+(прокси `sfera_backend` пропускает `portrait_text` вместо `requirements`; ДРУГОЙ репозиторий,
+разрешение владельца от 2026-09-10) выполнен. `VacancyProfileProxyView.post` валидирует
+`portrait_text` (непустая строка, обязателен), `source_url` опционален. `create_vacancy_profile`
+в `integrations/sfera_ai/client.py` шлёт `{portrait_text, source_url, notes, created_by_id}`.
+`SferaAiError` получил `response_body` (распарсенный JSON тела ошибки от `_request`).
+`_sfera_ai_error_response` — спецкейс на 422: реальный `detail` из тела SFERA-AI доходит до
+клиента как есть (не generic-текст), fallback на generic при отсутствии тела. Тесты
+`test_sfera_ai_proxy_views.py`/`test_client.py` переписаны под новый контракт + новые кейсы
+(400 на пустой `portrait_text`, 422 passthrough с телом и без). Полный
+`manage.py test courses integrations.sfera_ai` — 222 passed. Не закоммичено. Детали — журнал
+`epics/E23-vacancy-portrait-freetext/step-E23-04-backend-proxy-text.md`.
+
+Предыдущее: `2026-09-10` — шаг **E23-03**
+(`POST /vacancy-profile/` принимает `portrait_text`, вызывает LLM-извлечение) выполнен.
+`VacancyProfileCreate` больше не принимает `requirements` напрямую — только `portrait_text`/
+`source_url`; route зовёт `build_vacancy_requirements` до записи версии и до старта фонового
+потока скрининга, `InvalidVacancyRequirementsResponse` → HTTP 422 без побочных эффектов.
+`requirements["source_url"]` убирается перед сохранением (дублировал бы новую колонку и тёк бы
+в промпт fit-scoring). `_serialize_vacancy_profile` отдаёт `portrait_text`/`source_url`. Все
+тесты `test_vacancy_endpoints.py` на POST переписаны на новую форму body + 2 новых теста
+(strip `source_url`, 422 на невалидном JSON). Полный `uv run pytest` — 263 passed. Не
+закоммичено. Детали — журнал `epics/E23-vacancy-portrait-freetext/step-E23-03-api-text-to-llm.md`.
+
+Предыдущее: `2026-09-10` — шаг **E23-02**
+(`create_vacancy_profile_version` принимает опциональные `portrait_text`/`source_url`) выполнен.
+Сигнатура сервиса — новые keyword-параметры с дефолтами `""`/`None`, старые вызовы без них не
+ломаются. `cmd_create_from_portrait` (CLI) теперь передаёт оба поля в сервис — раньше молча
+терял их (находка архитектурного ревью 2026-09-10), из-за чего версии, созданные через CLI,
+расходились бы с версиями через HTTP API (E23-03). `cmd_create` (raw JSON) не тронут. 3 новых
+теста (2 сервисных, 1 CLI с замоканными `Settings`/`OpenRouterClient`/`build_vacancy_requirements`).
+Попутно найден и починен забытый регрессионный тест `tests/models/test_vacancy_profile.py` — не
+обновлён после E23-01, падал на отсутствии `portrait_text`/`source_url` в списке колонок. Полный
+`uv run pytest` — 261 passed. Не закоммичено. Детали — журнал
+`epics/E23-vacancy-portrait-freetext/step-E23-02-service-optional-kwargs.md`.
+
+Предыдущее: `2026-09-10` — шаг **E23-01** (`portrait_text`/`source_url`
+на `VacancyProfile`) выполнен. Модель дополнена двумя полями, Alembic-ревизия `0011`
+(`down_revision="0010"`) — `add_column` с `server_default=""` для NOT NULL `portrait_text`,
+`source_url` nullable. `alembic upgrade head` применён на staging. Побочно найден и
+исправлен рассинхрон: пароль `ai_owner` в локальном `.env` (`WRITE_DATABASE_URL`) устарел —
+на сервере он был сменён без обновления локальной копии; сверено напрямую через `psql` в
+контейнере `sfera-staging-db-1` (по алиасу `ssh sfera`), владелец подтвердил актуальный
+пароль, `.env` поправлен точечно (`sed`, только эта строка). Downgrade собственной ревизии
+проверен изолированно на SQLite (не полной цепочкой — общий chain 0001+ на SQLite падает
+раньше на постороннем `ALTER COLUMN ... DROP DEFAULT`, известное ограничение SQLite, не
+связано с этим шагом). `uv run pytest tests/services/test_vacancy_profile.py
+tests/cli/test_vacancy_profile_cli.py` — 3 passed. Не закоммичено. Детали — журнал
+`epics/E23-vacancy-portrait-freetext/step-E23-01-model-columns.md`.
+
+Предыдущее: `2026-09-10` — шаг **E22-01** (читаемые русские названия
 `criteria_scores` + версия промпта) выполнен, **эпик E22 полностью завершён**.
 `_SYSTEM_PROMPT` (`fit_scoring.py`) дополнен явным требованием: ключи `criteria_scores` —
 читаемые русские фразы через пробел, с заглавной буквы, без `_`, переформулированные по

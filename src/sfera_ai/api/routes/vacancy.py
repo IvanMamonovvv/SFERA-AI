@@ -15,13 +15,15 @@ from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.feedback_interpretation import interpret_feedback
 from sfera_ai.services.job_detection import enqueue_full_screening_for_course
 from sfera_ai.services.vacancy_memory import FeedbackAlreadyAppliedError, approve_feedback
+from sfera_ai.services.vacancy_portrait import InvalidVacancyRequirementsResponse, build_vacancy_requirements
 from sfera_ai.services.vacancy_profile import create_vacancy_profile_version
 
 router = APIRouter()
 
 
 class VacancyProfileCreate(BaseModel):
-    requirements: dict[str, Any]
+    portrait_text: str
+    source_url: str | None = None
     notes: str = ""
     created_by_id: int | None = None
 
@@ -46,6 +48,8 @@ def _serialize_vacancy_profile(profile: VacancyProfile) -> dict:
         "version": profile.version,
         "is_current": profile.is_current,
         "requirements": profile.requirements,
+        "portrait_text": profile.portrait_text,
+        "source_url": profile.source_url,
         "notes": profile.notes,
         "created_by_id": profile.created_by_id,
         "created_at": profile.created_at,
@@ -118,14 +122,22 @@ def create_vacancy_profile(
     request: Request,
     session: Session = Depends(get_session),
     platform_engine: Engine = Depends(get_platform_engine),
+    llm_client: OpenRouterClient = Depends(get_llm_client),
 ) -> dict:
     course_id, _ = resolve_course_or_404(platform_engine, course_uuid)
+    try:
+        requirements = build_vacancy_requirements(body.portrait_text, body.source_url, llm_client=llm_client)
+    except InvalidVacancyRequirementsResponse as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    requirements.pop("source_url", None)
     profile = create_vacancy_profile_version(
         session,
         course_id=course_id,
-        requirements=body.requirements,
+        requirements=requirements,
         notes=body.notes,
         created_by_id=body.created_by_id,
+        portrait_text=body.portrait_text,
+        source_url=body.source_url,
     )
     threading.Thread(
         target=_run_full_screening_background,
