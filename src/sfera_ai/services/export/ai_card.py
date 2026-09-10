@@ -118,7 +118,13 @@ def _latest_full_name(session: Session, candidate_profile_id: int) -> str | None
     return full_name if isinstance(full_name, str) and full_name.strip() else None
 
 
-def _bullets(items: list[Any], style: ParagraphStyle, marker_color: colors.Color) -> list[Paragraph]:
+def _bullets(items: list[Any] | str | None, style: ParagraphStyle, marker_color: colors.Color) -> list[Paragraph]:
+    # `summary` до fit-scoring-v3 (step-E17-05) хранился как строка-абзац, не список —
+    # старые записи анализа могут прийти сюда строкой даже после миграции колонки на
+    # JSON (миграция не переписывает существующие значения в списки). Без этой
+    # нормализации строка распадалась бы на буллеты по одному символу.
+    if isinstance(items, str):
+        items = [items] if items else []
     marker = f'<font color="{marker_color.hexval()}">■</font>'
     return [Paragraph(f"{marker} {item!s}", style) for item in items] or [Paragraph("—", style)]
 
