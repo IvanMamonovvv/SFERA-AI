@@ -12,7 +12,7 @@ def test_resume_extract_has_expected_columns():
     assert columns == {
         "id", "candidate_profile_id", "source_type", "source_answer_id", "hh_resume_id",
         "raw_text", "structured_data", "status", "error", "provider", "model",
-        "prompt_version", "processed_at", "created_at", "updated_at",
+        "prompt_version", "processed_at", "attempts", "retry_after", "created_at", "updated_at",
     }
 
 

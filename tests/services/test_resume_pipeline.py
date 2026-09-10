@@ -1,12 +1,19 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from sfera_ai.db.base import Base
 from sfera_ai.models.candidate_profile import CandidateProfile
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.providers import LLMResult
-from sfera_ai.services.resume_pipeline import find_anketa_resume_answer_id, process_resume
+from sfera_ai.services.resume_pipeline import (
+    ensure_resume_processed,
+    find_anketa_resume_answer_id,
+    process_resume,
+    requeue_failed_resumes,
+)
 
 _PDF_BYTES = b"%PDF-1.4 fake resume bytes"
 
@@ -259,3 +266,228 @@ def test_find_anketa_resume_answer_id_returns_none_when_no_file():
     result = find_anketa_resume_answer_id(platform_base, candidate_id=100)
 
     assert result is None
+
+
+def _application_candidate_platform_base(application_id: int, candidate_id: int, answer_rows: list[tuple]):
+    """courses_application + testchecks_* — платформа для ветки ensure_resume_processed
+    без hh_negotiation_id (get_candidate_id + find_anketa_resume_answer_id)."""
+    from sqlalchemy import create_engine
+
+    from sfera_ai.platform_db import reflect_platform_tables
+
+    platform_engine = create_engine("sqlite:///:memory:")
+    with platform_engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE courses_application (id INTEGER PRIMARY KEY, candidate_id INTEGER)")
+        conn.exec_driver_sql(
+            "INSERT INTO courses_application (id, candidate_id) VALUES (?, ?)", (application_id, candidate_id)
+        )
+        conn.exec_driver_sql("CREATE TABLE testchecks_question (id INTEGER PRIMARY KEY, question_text TEXT)")
+        conn.exec_driver_sql("CREATE TABLE testchecks_testattempt (id INTEGER PRIMARY KEY, candidate_id INTEGER)")
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, question_id INTEGER, "
+            "attempt_id INTEGER, answered_at TEXT, file TEXT)"
+        )
+        for answer_id, question_id, attempt_id, question_text, answered_at in answer_rows:
+            conn.exec_driver_sql(
+                "INSERT OR IGNORE INTO testchecks_question (id, question_text) VALUES (?, ?)",
+                (question_id, question_text),
+            )
+            conn.exec_driver_sql(
+                "INSERT OR IGNORE INTO testchecks_testattempt (id, candidate_id) VALUES (?, ?)",
+                (attempt_id, candidate_id),
+            )
+            conn.exec_driver_sql(
+                "INSERT INTO testchecks_answer (id, question_id, attempt_id, answered_at, file) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (answer_id, question_id, attempt_id, answered_at, "answer_file/resume.pdf"),
+            )
+    return reflect_platform_tables(
+        platform_engine,
+        tables=("courses_application", "testchecks_question", "testchecks_testattempt", "testchecks_answer"),
+    )
+
+
+def test_ensure_resume_processed_hh_lead_branch_calls_process_resume(tmp_engine, monkeypatch):
+    Base.metadata.create_all(tmp_engine)
+    monkeypatch.setattr(
+        "sfera_ai.services.resume_pipeline.extract_text",
+        lambda file_bytes, mime_type: "Иван Иванов, Python-разработчик, 5 лет опыта",
+    )
+    hh_client = MagicMock()
+    hh_client.get_resume_pdf.return_value = _PDF_BYTES
+    llm_client = _llm_client()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+
+        ensure_resume_processed(
+            profile, platform_base=_hh_platform_base(), hh_client=hh_client,
+            s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=llm_client, session=session,
+        )
+
+        extract = session.scalar(select(ResumeExtract).where(ResumeExtract.candidate_profile_id == profile.id))
+        assert extract.status == "DONE"
+        assert extract.source_type == "HH_RESUME"
+
+
+def test_ensure_resume_processed_anketa_branch_calls_process_resume(tmp_engine, monkeypatch):
+    Base.metadata.create_all(tmp_engine)
+    monkeypatch.setattr(
+        "sfera_ai.services.resume_pipeline.extract_text",
+        lambda file_bytes, mime_type: "Иван Иванов, Python-разработчик, 5 лет опыта",
+    )
+    platform_base = _application_candidate_platform_base(
+        application_id=1, candidate_id=100,
+        answer_rows=[(1, 10, 100, "ANKETA_RESUME", "2026-01-01T00:00:00")],
+    )
+    s3_client = MagicMock()
+    s3_client.get_object.return_value = {"Body": MagicMock(read=MagicMock(return_value=_PDF_BYTES))}
+    llm_client = _llm_client()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1)
+        session.add(profile)
+        session.commit()
+
+        ensure_resume_processed(
+            profile, platform_base=platform_base, hh_client=MagicMock(),
+            s3_client=s3_client, s3_bucket="test-bucket", llm_client=llm_client, session=session,
+        )
+
+        extract = session.scalar(select(ResumeExtract).where(ResumeExtract.candidate_profile_id == profile.id))
+        assert extract.status == "DONE"
+        assert extract.source_type == "ANKETA_FILE"
+
+
+def test_ensure_resume_processed_no_resume_anywhere_is_noop(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _application_candidate_platform_base(application_id=1, candidate_id=100, answer_rows=[])
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1)
+        session.add(profile)
+        session.commit()
+
+        ensure_resume_processed(
+            profile, platform_base=platform_base, hh_client=MagicMock(),
+            s3_client=MagicMock(), s3_bucket="test-bucket", llm_client=MagicMock(), session=session,
+        )
+
+        extract = session.scalar(select(ResumeExtract).where(ResumeExtract.candidate_profile_id == profile.id))
+        assert extract is None
+
+
+def test_requeue_failed_resumes_success_marks_done_and_clears_retry_after(tmp_engine, monkeypatch):
+    Base.metadata.create_all(tmp_engine)
+    monkeypatch.setattr(
+        "sfera_ai.services.resume_pipeline.extract_text",
+        lambda file_bytes, mime_type: "Иван Иванов, Python-разработчик, 5 лет опыта",
+    )
+    hh_client = MagicMock()
+    hh_client.get_resume_pdf.return_value = _PDF_BYTES
+    llm_client = _llm_client()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="FAILED", attempts=1, retry_after=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        session.add(extract)
+        session.commit()
+
+        retried = requeue_failed_resumes(
+            session, _hh_platform_base(), hh_client=hh_client, s3_client=MagicMock(),
+            s3_bucket="test-bucket", llm_client=llm_client, max_attempts=5,
+        )
+
+        assert [r.id for r in retried] == [extract.id]
+        session.refresh(extract)
+        assert extract.status == "DONE"
+        assert extract.retry_after is None
+        assert extract.attempts == 1
+
+
+def test_requeue_failed_resumes_still_failing_increments_attempts_and_backoff(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    from sfera_ai.integrations.hh_client import HHClientError
+
+    hh_client = MagicMock()
+    hh_client.get_resume_pdf.side_effect = HHClientError("resume.pdf failed: 500")
+    llm_client = _llm_client()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="FAILED", attempts=1, retry_after=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        session.add(extract)
+        session.commit()
+
+        requeue_failed_resumes(
+            session, _hh_platform_base(), hh_client=hh_client, s3_client=MagicMock(),
+            s3_bucket="test-bucket", llm_client=llm_client, max_attempts=5,
+        )
+
+        session.refresh(extract)
+        assert extract.status == "FAILED"
+        assert extract.attempts == 2
+        naive_future = (datetime.now(UTC) + timedelta(minutes=9)).replace(tzinfo=None)
+        assert extract.retry_after > naive_future
+
+
+def test_requeue_failed_resumes_skips_rows_at_max_attempts(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    hh_client = MagicMock()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="FAILED", attempts=5, retry_after=None,
+        )
+        session.add(extract)
+        session.commit()
+
+        retried = requeue_failed_resumes(
+            session, _hh_platform_base(), hh_client=hh_client, s3_client=MagicMock(),
+            s3_bucket="test-bucket", llm_client=MagicMock(), max_attempts=5,
+        )
+
+        assert retried == []
+        assert hh_client.get_resume_pdf.call_count == 0
+        session.refresh(extract)
+        assert extract.attempts == 5
+
+
+def test_requeue_failed_resumes_skips_rows_with_future_retry_after(tmp_engine):
+    Base.metadata.create_all(tmp_engine)
+    hh_client = MagicMock()
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(hh_negotiation_id=42)
+        session.add(profile)
+        session.commit()
+        extract = ResumeExtract(
+            candidate_profile_id=profile.id, source_type="HH_RESUME", hh_resume_id="hh-1",
+            status="FAILED", attempts=1, retry_after=datetime.now(UTC) + timedelta(hours=1),
+        )
+        session.add(extract)
+        session.commit()
+
+        retried = requeue_failed_resumes(
+            session, _hh_platform_base(), hh_client=hh_client, s3_client=MagicMock(),
+            s3_bucket="test-bucket", llm_client=MagicMock(), max_attempts=5,
+        )
+
+        assert retried == []
+        assert hh_client.get_resume_pdf.call_count == 0

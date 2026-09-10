@@ -16,10 +16,9 @@ from sfera_ai.platform_db import RESUME_DETECTION_TABLES, reflect_platform_table
 from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.candidate_facts import build_or_update_candidate_facts, resume_status
 from sfera_ai.services.candidate_identity import resolve_or_create_candidate_profile
-from sfera_ai.services.change_detection import get_candidate_id
 from sfera_ai.services.export.archive import build_candidates_export_archive
 from sfera_ai.services.fit_scoring import run_fit_scoring
-from sfera_ai.services.resume_pipeline import find_anketa_resume_answer_id, process_resume
+from sfera_ai.services.resume_pipeline import ensure_resume_processed
 
 _FIELDNAMES = (
     "candidate_profile_id", "application_id", "data_completeness", "fit_score",
@@ -34,34 +33,12 @@ def _application_ids_for_course(platform_base, course_id: int) -> list[int]:
     return [row[0] for row in rows]
 
 
-def _process_resume_for_profile(profile, *, platform_base, hh_client, s3_client, s3_bucket, llm_client, session) -> None:
-    if profile.hh_negotiation_id is not None:
-        process_resume(
-            session=session, platform_base=platform_base, hh_client=hh_client,
-            s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
-            candidate_profile_id=profile.id, hh_resume_id=str(profile.hh_negotiation_id),
-        )
-        return
-
-    candidate_id = get_candidate_id(platform_base, profile)
-    if candidate_id is None:
-        return
-    answer_id = find_anketa_resume_answer_id(platform_base, candidate_id)
-    if answer_id is None:
-        return
-    process_resume(
-        session=session, platform_base=platform_base, hh_client=hh_client,
-        s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
-        candidate_profile_id=profile.id, source_answer_id=answer_id,
-    )
-
-
 def _screen_profile(
     session, profile: CandidateProfile, application_id: int | None, *, platform_base,
     vacancy_profile: VacancyProfile, hh_client, s3_client, s3_bucket: str, llm_client,
 ) -> dict:
     try:
-        _process_resume_for_profile(
+        ensure_resume_processed(
             profile, platform_base=platform_base, hh_client=hh_client,
             s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client, session=session,
         )

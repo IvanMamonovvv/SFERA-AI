@@ -38,13 +38,22 @@ class HHClient:
             raise HHClientError(f"backend auth failed: {response.status_code} {response.text[:200]}")
         self._access_token = response.json()["access"]
 
+    def _get_with_retry(self, url: str, headers: dict[str, str]) -> httpx.Response:
+        """Один повтор при RemoteProtocolError — зеркало
+        `OpenRouterClient._request_with_retry` (providers.py). Retry идёт по новому
+        соединению из пула, не по тому же самому."""
+        try:
+            return self._http.get(url, headers=headers)
+        except httpx.RemoteProtocolError:
+            return self._http.get(url, headers=headers)
+
     def _get(self, url: str) -> httpx.Response:
         if self._access_token is None:
             self._authenticate()
-        response = self._http.get(url, headers=self._headers({"Authorization": f"Bearer {self._access_token}"}))
+        response = self._get_with_retry(url, self._headers({"Authorization": f"Bearer {self._access_token}"}))
         if response.status_code == 401:
             self._authenticate()
-            response = self._http.get(url, headers=self._headers({"Authorization": f"Bearer {self._access_token}"}))
+            response = self._get_with_retry(url, self._headers({"Authorization": f"Bearer {self._access_token}"}))
         return response
 
     def get_resume_pdf(self, hh_negotiation_id: int, company_slug: str) -> bytes:

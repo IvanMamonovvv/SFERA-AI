@@ -1,10 +1,13 @@
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session as PlatformSession
 
 from sfera_ai.integrations.hh_client import HHClient
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.providers import OpenRouterClient
+from sfera_ai.services.change_detection import get_candidate_id
 from sfera_ai.services.resume_extraction import run_resume_extraction
 from sfera_ai.services.resume_fetch import fetch_resume_bytes
 from sfera_ai.services.resume_text_extraction import TextExtractionError, extract_text
@@ -103,3 +106,70 @@ def process_resume(
         session.commit()
 
     return run_resume_extraction(extract, session=session, llm_client=llm_client)
+
+
+def ensure_resume_processed(profile, *, platform_base, hh_client, s3_client, s3_bucket, llm_client, session) -> None:
+    """HH-лид → резюме по hh_negotiation_id; иначе — анкетное резюме по
+    ANKETA_RESUME-ответу; кандидат без резюме ни там ни там — no-op
+    (перенесено из cli/run_full_course_screening.py, step-E18-01a)."""
+    if profile.hh_negotiation_id is not None:
+        process_resume(
+            session=session, platform_base=platform_base, hh_client=hh_client,
+            s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
+            candidate_profile_id=profile.id, hh_resume_id=str(profile.hh_negotiation_id),
+        )
+        return
+
+    candidate_id = get_candidate_id(platform_base, profile)
+    if candidate_id is None:
+        return
+    answer_id = find_anketa_resume_answer_id(platform_base, candidate_id)
+    if answer_id is None:
+        return
+    process_resume(
+        session=session, platform_base=platform_base, hh_client=hh_client,
+        s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
+        candidate_profile_id=profile.id, source_answer_id=answer_id,
+    )
+
+
+def requeue_failed_resumes(
+    session: Session,
+    platform_base,
+    *,
+    hh_client: HHClient,
+    s3_client,
+    s3_bucket: str,
+    llm_client: OpenRouterClient,
+    max_attempts: int,
+) -> list[ResumeExtract]:
+    """Отдельный периодический ретрай `ResumeExtract.status=FAILED` — без участия
+    `AIProcessingJob`/детекции (step-E18-03). Строки с `attempts >= max_attempts`
+    в выборку не попадают вообще — остаются `FAILED` навсегда."""
+    from sfera_ai.services.job_processing import backoff  # локальный импорт — циклическая зависимость
+
+    now = datetime.now(UTC)
+    rows = session.scalars(
+        select(ResumeExtract).where(
+            ResumeExtract.status == "FAILED",
+            ResumeExtract.attempts < max_attempts,
+            or_(ResumeExtract.retry_after.is_(None), ResumeExtract.retry_after <= now),
+        )
+    ).all()
+
+    for extract in rows:
+        process_resume(
+            session=session, platform_base=platform_base, hh_client=hh_client,
+            s3_client=s3_client, s3_bucket=s3_bucket, llm_client=llm_client,
+            candidate_profile_id=extract.candidate_profile_id,
+            source_answer_id=extract.source_answer_id,
+            hh_resume_id=extract.hh_resume_id,
+        )
+        if extract.status == "DONE":
+            extract.retry_after = None
+        else:
+            extract.attempts += 1
+            extract.retry_after = now + backoff(extract.attempts)
+        session.commit()
+
+    return rows

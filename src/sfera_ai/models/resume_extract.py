@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from sfera_ai.db.base import Base, TimestampMixin
@@ -21,6 +21,7 @@ class ResumeExtract(TimestampMixin, Base):
         UniqueConstraint(
             "candidate_profile_id", "hh_resume_id", name="uq_resume_extract_candidate_hh_resume"
         ),
+        Index("ix_resume_extract_status_retry_after", "status", "retry_after"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -38,3 +39,5 @@ class ResumeExtract(TimestampMixin, Base):
     model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     prompt_version: Mapped[str] = mapped_column(String(32), nullable=False, default="")
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

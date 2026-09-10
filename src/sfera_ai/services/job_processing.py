@@ -11,6 +11,7 @@ from sfera_ai.providers import OpenRouterClient
 from sfera_ai.services.candidate_facts import build_or_update_candidate_facts
 from sfera_ai.services.change_detection import needs_profile_rebuild
 from sfera_ai.services.fit_scoring import run_fit_scoring
+from sfera_ai.services.resume_pipeline import ensure_resume_processed
 
 BACKOFF_BASE_MINUTES = 5
 
@@ -64,11 +65,20 @@ def _run_real_ai_call(
     llm_client: OpenRouterClient | None,
     job: AIProcessingJob,
     profile: CandidateProfile,
+    *,
+    hh_client,
+    s3_client,
+    s3_bucket: str | None,
 ) -> None:
+    ensure_resume_processed(
+        profile, platform_base=platform_base, hh_client=hh_client, s3_client=s3_client,
+        s3_bucket=s3_bucket, llm_client=llm_client, session=session,
+    )
     if job.reason in VACANCY_REASONS:
         vacancy_profile = _current_vacancy_profile(session, job.course_id)
         if vacancy_profile is None:
             raise ValueError(f"нет текущего VacancyProfile для course_id={job.course_id}")
+        build_or_update_candidate_facts(session, platform_base, llm_client, profile)
         run_fit_scoring(
             session, candidate_profile=profile, vacancy_profile=vacancy_profile, llm_client=llm_client
         )
@@ -84,6 +94,9 @@ def process_batch(
     limit: int,
     dry_run: bool,
     pilot_course_id: int | None = None,
+    hh_client=None,
+    s3_client=None,
+    s3_bucket: str | None = None,
 ) -> list[AIProcessingJob]:
     """03_TDD.md, «6. Processing Queue» — блокирует до `limit` `PENDING`-джоб
     (`SKIP LOCKED`), каждую обрабатывает в своём try/except (падение одной не блокирует
@@ -122,7 +135,10 @@ def process_batch(
             # _still_relevant всегда вычисляется (идемпотентность — только чтение), но
             # реальный AI-вызов делаем лишь когда условие ещё истинно и dry-run снят.
             if _still_relevant(platform_base, job, profile) and not dry_run:
-                _run_real_ai_call(session, platform_base, llm_client, job, profile)
+                _run_real_ai_call(
+                    session, platform_base, llm_client, job, profile,
+                    hh_client=hh_client, s3_client=s3_client, s3_bucket=s3_bucket,
+                )
             job.status = "DONE"
             job.finished_at = datetime.now(UTC)
         except Exception as exc:

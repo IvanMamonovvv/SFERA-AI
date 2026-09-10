@@ -30,6 +30,7 @@
 | E15 | «Обработка кандидатов» — модалка HR-скрининга по портрету вакансии (SFERA-AI + `sfera_backend` + `SPHERA`) | E6, E8, E9 | часть шагов в других репозиториях — явное разрешение на каждый |
 | E16 | Деплой сервиса на VPS — ai-scheduler отдельным процессом (был не задеплоен), deploy-скрипт по образцу backend/frontend | E0 | нулевой (только SFERA-AI, инфра) |
 | E17 | Точность карточки — приоритет резюме над платформенными полями, склейка резюме в один PDF | E9, E13 | низкий-средний (меняет `_platform_block`/экспорт, известный баг вложения резюме) |
+| E18 | Шедулер реально обрабатывает резюме — сейчас `process_resume` вызывается только вручную из CLI, автопайплайн его не знает | E3, E5 | средний (меняет обработчик очереди; шаг B/C — retry сетевых ошибок HH + авто-ретрай FAILED, шаг C с Alembic-миграцией) |
 
 ## Разбивка на шаги
 
@@ -387,6 +388,42 @@ step-NN-*.md`; шаги ниже — только краткая карта + я
   `card.pdf` + резюме в один PDF (`pypdf`), не-PDF резюме — страница-заглушка +
   файл всё равно в ZIP (fallback), замена прежнего поведения ZIP с отдельным
   `resume.<ext>` (E9-03).
+
+### E18 — Шедулер реально обрабатывает резюме
+
+Найдено 2026-09-10 при расследовании бага «Резюме не удалось обработать» в PDF-карточке
+(course_id=39, 34/82 резюме упали на обрыве keep-alive соединения с OpenRouter — фикс
+retry уже в `main`, коммит `8e1363e`). Побочно найдена более фундаментальная проблема:
+автоматический тик шедулера (`scheduler.py::run_tick`, раз в 30 минут) вообще никогда не
+вызывает `services/resume_pipeline.py::process_resume` — ни для новых кандидатов, ни
+ретраем упавших. `job_processing.py::_run_real_ai_call` вызывает только `run_fit_scoring`
+(вакансийные reason'ы) или `build_or_update_candidate_facts` (остальные) — ни один путь
+не скачивает/парсит резюме. Резюме сейчас обрабатывается **только** ручным запуском CLI.
+Риск, которого боится владелец: кандидат закрывает доступ к резюме на HH раньше, чем
+успеваем его скачать. Согласованный с владельцем порядок реализации — по одному шагу,
+каждый с отдельным явным «начинай»:
+
+- [x] Шаг A (самое важное, без миграции БД) — вшить вызов `process_resume` в
+  `_run_real_ai_call`, чтобы резюме скачивалось/парсилось в течение 30 минут после
+  отклика кандидата, а не ждало ручного CLI. Готово, разбит на 3 под-шага
+  (последовательная цепочка, каждый со своим DoD), все DONE 2026-09-10:
+  - [x] `epics/E18-scheduler-resume-pipeline/step-E18-01a-resume-pipeline-service-extraction.md`
+    — вынести `ensure_resume_processed` из CLI в сервисный слой.
+  - [x] `step-E18-01b-job-processing-calls-resume-pipeline.md` — `_run_real_ai_call`/
+    `process_batch` безусловно вызывают `ensure_resume_processed`; в ветке
+    `VACANCY_REASONS` дополнительно фикс facts staleness (найдено ревью-агентом
+    2026-09-10, подтверждён владельцем): `build_or_update_candidate_facts` перед
+    `run_fit_scoring`, иначе свежескачанное резюме не попадёт в `fit_score`.
+  - [x] `step-E18-01c-scheduler-wiring.md` — `scheduler.py::run_tick` собирает
+    `hh_client`/`s3_client`, рефлексит `RESUME_DETECTION_TABLES`.
+- [x] `step-E18-02-hh-client-retry.md` — (B) один retry на транспортную ошибку в
+  `HHClient.get_resume_pdf` (`integrations/hh_client.py`), по образцу уже сделанного
+  фикса `providers.py::OpenRouterClient._request_with_retry` (`8e1363e`). DONE 2026-09-10.
+- [x] `step-E18-03-failed-resume-requeue.md` — (C, с Alembic-миграцией) отдельный
+  крон-джоб для авто-ретрая уже упавших `ResumeExtract.status=FAILED`, по образцу
+  `scheduler.py::run_requeue_stuck`/`job_processing.py::requeue_stuck_jobs`. Новые поля
+  `attempts`/`retry_after` на `ResumeExtract` + `resume_extract_max_attempts=5` (владелец
+  подтвердил), cron раз в 2 часа. DONE 2026-09-10 — эпик E18 закрыт целиком.
 
 ## Граф зависимостей
 
