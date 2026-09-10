@@ -1,8 +1,12 @@
+import logging
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import Session as PlatformSession
+
+logger = logging.getLogger(__name__)
 
 from sfera_ai.models.ai_processing_job import AIProcessingJob
 from sfera_ai.models.candidate_profile import CandidateProfile
@@ -55,21 +59,34 @@ def resolve_company_name_for_course(platform_base, course_id: int) -> str | None
 def resolve_candidate_platform_name(platform_base, candidate_profile_id: int) -> str | None:
     """ФИО кандидата из `CustomUser.name` (`users_customuser`, PK = `candidate_profile_id` —
     03_TDD.md, identity-модель) — источник для шапки PDF-карточки, не зависит от резюме
-    (в отличие от `_latest_full_name`): доступен, даже если резюме не удалось обработать."""
-    User = platform_base.classes.users_customuser
-    with PlatformSession(platform_base.engine) as platform_session:
-        return platform_session.execute(select(User.name).where(User.id == candidate_profile_id)).scalar_one_or_none()
+    (в отличие от `_latest_full_name`): доступен, даже если резюме не удалось обработать.
+    None при недоступности источника (нет GRANT на новую платформенную таблицу, таблица
+    не в списке reflection) — украшение шапки не должно валить весь экспорт (500)."""
+    try:
+        User = platform_base.classes.users_customuser
+        with PlatformSession(platform_base.engine) as platform_session:
+            return platform_session.execute(
+                select(User.name).where(User.id == candidate_profile_id)
+            ).scalar_one_or_none()
+    except (SQLAlchemyError, AttributeError) as exc:
+        logger.warning("resolve_candidate_platform_name_failed candidate_profile_id=%s error=%s", candidate_profile_id, exc)
+        return None
 
 
 def resolve_vacancy_title_for_course(platform_base, course_id: int) -> str | None:
     """Название вакансии для шапки PDF-карточки — `VacancyCourseMapping.hh_vacancy_title`
     (PLATFORM_AUDIT_REFERENCE.md, «2. Сущность кандидата»: вакансия = курс с привязанной
-    через `VacancyCourseMapping` HH-вакансией). None — mapping ещё не назначен курсу."""
-    Mapping = platform_base.classes.headhunter_vacancycoursemapping
-    with PlatformSession(platform_base.engine) as platform_session:
-        return platform_session.execute(
-            select(Mapping.hh_vacancy_title).where(Mapping.course_id == course_id)
-        ).scalar_one_or_none()
+    через `VacancyCourseMapping` HH-вакансией). None — mapping ещё не назначен курсу, либо
+    источник недоступен (см. `resolve_candidate_platform_name` — та же причина/защита)."""
+    try:
+        Mapping = platform_base.classes.headhunter_vacancycoursemapping
+        with PlatformSession(platform_base.engine) as platform_session:
+            return platform_session.execute(
+                select(Mapping.hh_vacancy_title).where(Mapping.course_id == course_id)
+            ).scalar_one_or_none()
+    except (SQLAlchemyError, AttributeError) as exc:
+        logger.warning("resolve_vacancy_title_for_course_failed course_id=%s error=%s", course_id, exc)
+        return None
 
 
 def resolve_company_slug_for_hh_negotiation(platform_base, hh_negotiation_id: int) -> str | None:
