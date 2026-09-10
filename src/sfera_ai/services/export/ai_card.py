@@ -394,7 +394,7 @@ def render_ai_card_pdf(
         resolve_company_name_for_course(platform_base, course_id) if platform_base is not None else None
     ) or _DEFAULT_CLIENT_NAME
     vacancy_title = resolve_vacancy_title_for_course(platform_base, course_id) if platform_base is not None else None
-    strip_label = f"{client_name} {vacancy_title}" if vacancy_title else client_name
+    strip_label = vacancy_title or client_name
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -429,7 +429,7 @@ def render_ai_card_pdf(
             _STYLE_TOTAL,
         ),
         Spacer(1, 0.4 * cm),
-        Paragraph("SFERA | AI-анализ кандидата по данным резюме и платформы", _STYLE_FOOTER),
+        Paragraph("SFERA | Анализ кандидата по данным резюме и платформы", _STYLE_FOOTER),
     ]
     doc.build([KeepTogether(card)])
     return buffer.getvalue()

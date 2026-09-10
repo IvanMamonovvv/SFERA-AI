@@ -102,6 +102,44 @@ def test_dry_run_flag_off_dispatches_vacancy_reason_to_fit_scoring(tmp_engine, m
         assert calls == [(profile.id, vacancy.id)]
 
 
+def test_dry_run_flag_off_dispatches_backfill_reason_to_fit_scoring(tmp_engine, monkeypatch):
+    """step-E24-01: BACKFILL (первый отклик, ни разу не анализировался) должен реально
+    считать fit_score, а не только пересобирать факты — раньше джоба с reason=BACKFILL
+    закрывалась DONE без run_fit_scoring, кандидат никогда не попадал в список
+    подходящих (найдено архитектурным ревью 2026-09-10, план E25)."""
+    import sfera_ai.services.job_processing as job_processing
+    from sfera_ai.models.vacancy_profile import VacancyProfile
+
+    calls = []
+    monkeypatch.setattr(job_processing, "ensure_resume_processed", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        job_processing,
+        "build_or_update_candidate_facts",
+        lambda session, platform_base, llm_client, profile: profile,
+    )
+    monkeypatch.setattr(
+        job_processing,
+        "run_fit_scoring",
+        lambda session, *, candidate_profile, vacancy_profile, llm_client: calls.append(
+            (candidate_profile.id, vacancy_profile.id)
+        ),
+    )
+
+    Base.metadata.create_all(tmp_engine)
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=1, sources_snapshot={})
+        vacancy = VacancyProfile(course_id=42, version=1, is_current=True, requirements={})
+        session.add_all([profile, vacancy])
+        session.commit()
+        session.add(AIProcessingJob(candidate_profile_id=profile.id, course_id=42, reason="BACKFILL"))
+        session.commit()
+
+        processed = process_batch(session, platform_base=None, limit=5, dry_run=False)
+
+        assert processed[0].status == "DONE"
+        assert calls == [(profile.id, vacancy.id)]
+
+
 def test_no_longer_relevant_job_skips_ai_call(tmp_engine, monkeypatch):
     """DoD п.1: джоба с уже неактуальным условием (CANDIDATE_DATA_CHANGED, но
     needs_profile_rebuild уже False) — DONE без AI-вызова, счётчик вызовов == 0."""
