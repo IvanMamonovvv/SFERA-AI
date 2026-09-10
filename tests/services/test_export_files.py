@@ -156,6 +156,33 @@ def test_resume_refetch_failure_at_export_does_not_corrupt_done_status(tmp_engin
         assert extract.error == ""
 
 
+def test_resume_available_when_status_failed_but_file_downloadable(tmp_engine):
+    """Регрессия карточки #2623: `status=FAILED` означает провал текстовой экстракции
+    (LLM/JSON-парсинг, см. `resume_extraction.py`), не отсутствие самого файла — если
+    файл реально скачивается, его нужно приложить к card.pdf даже при FAILED."""
+    Base.metadata.create_all(tmp_engine)
+    platform_base = _platform_base(resume_answer=(1, "resume.pdf"))
+    s3_client = _s3_client({"resume.pdf": b"%PDF-resume"})
+
+    with Session(tmp_engine) as session:
+        profile = CandidateProfile(application_id=7)
+        session.add(profile)
+        session.commit()
+        session.add(
+            ResumeExtract(
+                candidate_profile_id=profile.id, source_type="ANKETA_FILE", source_answer_id=1,
+                status="FAILED", error="LLM вернул невалидный JSON",
+            )
+        )
+        session.commit()
+
+        result = collect_export_files(
+            session, platform_base, profile.id, hh_client=MagicMock(), s3_client=s3_client, s3_bucket="bucket",
+        )
+
+        assert result["resume"] == {"available": True, "bytes": b"%PDF-resume", "source_type": "ANKETA_FILE"}
+
+
 def test_unknown_candidate_profile_id_returns_unavailable(tmp_engine):
     Base.metadata.create_all(tmp_engine)
     platform_base = _platform_base()

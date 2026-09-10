@@ -8,9 +8,14 @@ from sfera_ai.services.resume_fetch import fetch_resume_bytes_readonly
 
 
 def _resume_file(session: Session, platform_base, profile: CandidateProfile, *, hh_client, s3_client, s3_bucket):
+    # status="DONE" отражает успех ТЕКСТОВОЙ экстракции (LLM-парсинг), не наличие
+    # самого файла — при FAILED на этапе парсинга файл резюме зачастую физически
+    # скачан и валиден, поэтому фильтр по status тут не нужен: пробуем скачать файл
+    # для любой записи, fetch_resume_bytes_readonly сам вернёт None при реальной
+    # недоступности (баг карточки #2623, журнал step-E17-03).
     extract = session.scalar(
         select(ResumeExtract)
-        .where(ResumeExtract.candidate_profile_id == profile.id, ResumeExtract.status == "DONE")
+        .where(ResumeExtract.candidate_profile_id == profile.id)
         .order_by(ResumeExtract.id.desc())
     )
     if extract is None:
