@@ -9,7 +9,7 @@ from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.platform_db import reflect_platform_tables
 from sfera_ai.services.export.files import collect_export_files
 
-TABLES = ("courses_application", "testchecks_testattempt", "testchecks_answer", "testchecks_transcriptionjob")
+TABLES = ("courses_application", "testchecks_testattempt", "testchecks_answer", "testchecks_question")
 
 
 def _platform_base(*, resume_answer=None, video_answer=None, application_id=7, candidate_id=100):
@@ -23,27 +23,28 @@ def _platform_base(*, resume_answer=None, video_answer=None, application_id=7, c
             "CREATE TABLE testchecks_testattempt (id INTEGER PRIMARY KEY, candidate_id INTEGER)"
         )
         conn.exec_driver_sql(
-            "CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, attempt_id INTEGER, file TEXT)"
+            "CREATE TABLE testchecks_question (id INTEGER PRIMARY KEY, is_video_intro BOOLEAN)"
         )
         conn.exec_driver_sql(
-            "CREATE TABLE testchecks_transcriptionjob (id INTEGER PRIMARY KEY, answer_id INTEGER, status TEXT)"
+            "CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, attempt_id INTEGER, question_id INTEGER, file TEXT)"
         )
         conn.exec_driver_sql(
             f"INSERT INTO courses_application (id, candidate_id) VALUES ({application_id}, {candidate_id})"
         )
         conn.exec_driver_sql(f"INSERT INTO testchecks_testattempt (id, candidate_id) VALUES (1, {candidate_id})")
+        conn.exec_driver_sql("INSERT INTO testchecks_question (id, is_video_intro) VALUES (1, 0)")
+        conn.exec_driver_sql("INSERT INTO testchecks_question (id, is_video_intro) VALUES (2, 1)")
         if resume_answer is not None:
             answer_id, file_key = resume_answer
             conn.exec_driver_sql(
-                f"INSERT INTO testchecks_answer (id, attempt_id, file) VALUES ({answer_id}, 1, '{file_key}')"
+                f"INSERT INTO testchecks_answer (id, attempt_id, question_id, file) "
+                f"VALUES ({answer_id}, 1, 1, '{file_key}')"
             )
         if video_answer is not None:
             answer_id, file_key = video_answer
             conn.exec_driver_sql(
-                f"INSERT INTO testchecks_answer (id, attempt_id, file) VALUES ({answer_id}, 1, '{file_key}')"
-            )
-            conn.exec_driver_sql(
-                f"INSERT INTO testchecks_transcriptionjob (answer_id, status) VALUES ({answer_id}, 'DONE')"
+                f"INSERT INTO testchecks_answer (id, attempt_id, question_id, file) "
+                f"VALUES ({answer_id}, 1, 2, '{file_key}')"
             )
     return reflect_platform_tables(engine, tables=TABLES)
 

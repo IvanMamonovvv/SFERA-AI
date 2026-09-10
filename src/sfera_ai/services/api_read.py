@@ -14,6 +14,7 @@ from sfera_ai.models.candidate_vacancy_analysis import CandidateVacancyAnalysis
 from sfera_ai.models.candidate_vacancy_transfer import CandidateVacancyTransfer
 from sfera_ai.models.resume_extract import ResumeExtract
 from sfera_ai.services.candidate_facts import resume_status
+from sfera_ai.services.change_detection import get_candidate_id
 
 SCREENING_FIT_SCORE_THRESHOLD = 60
 
@@ -56,20 +57,29 @@ def resolve_company_name_for_course(platform_base, course_id: int) -> str | None
         ).scalar_one_or_none()
 
 
-def resolve_candidate_platform_name(platform_base, candidate_profile_id: int) -> str | None:
-    """ФИО кандидата из `CustomUser.name` (`users_customuser`, PK = `candidate_profile_id` —
-    03_TDD.md, identity-модель) — источник для шапки PDF-карточки, не зависит от резюме
-    (в отличие от `_latest_full_name`): доступен, даже если резюме не удалось обработать.
-    None при недоступности источника (нет GRANT на новую платформенную таблицу, таблица
-    не в списке reflection) — украшение шапки не должно валить весь экспорт (500)."""
+def resolve_candidate_platform_name(platform_base, profile: CandidateProfile) -> str | None:
+    """ФИО кандидата из `CustomUser.name` (`users_customuser`) — источник для шапки
+    PDF-карточки, не зависит от резюме (в отличие от `_latest_full_name`): доступен,
+    даже если резюме не удалось обработать.
+    `CustomUser.id` резолвится через `get_candidate_id` (`Application.candidate_id`,
+    PLATFORM_AUDIT_REFERENCE.md, «2. Сущность кандидата») — НЕ через `profile.id`
+    (свой PK этого сервиса, случайное совпадение чисел с чужим `users_customuser.id`
+    давало неверное ФИО в карточке, баг найден владельцем 2026-09-10). `None` для
+    HH-лидов без `application_id` (кандидат ещё не стартовал демонстрацию) — вызывающая
+    сторона использует `_latest_full_name` как fallback.
+    None также при недоступности источника (нет GRANT на новую платформенную таблицу,
+    таблица не в списке reflection) — украшение шапки не должно валить весь экспорт (500)."""
+    candidate_id = get_candidate_id(platform_base, profile)
+    if candidate_id is None:
+        return None
     try:
         User = platform_base.classes.users_customuser
         with PlatformSession(platform_base.engine) as platform_session:
             return platform_session.execute(
-                select(User.name).where(User.id == candidate_profile_id)
+                select(User.name).where(User.id == candidate_id)
             ).scalar_one_or_none()
     except (SQLAlchemyError, AttributeError) as exc:
-        logger.warning("resolve_candidate_platform_name_failed candidate_profile_id=%s error=%s", candidate_profile_id, exc)
+        logger.warning("resolve_candidate_platform_name_failed candidate_profile_id=%s error=%s", profile.id, exc)
         return None
 
 

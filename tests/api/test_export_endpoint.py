@@ -46,7 +46,12 @@ def _platform_engine():
             "completed_lessons INTEGER, total_lessons INTEGER)"
         )
         conn.exec_driver_sql("CREATE TABLE testchecks_testattempt (id INTEGER PRIMARY KEY, candidate_id INTEGER)")
-        conn.exec_driver_sql("CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, attempt_id INTEGER, file TEXT)")
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_question (id INTEGER PRIMARY KEY, is_video_intro BOOLEAN)"
+        )
+        conn.exec_driver_sql(
+            "CREATE TABLE testchecks_answer (id INTEGER PRIMARY KEY, attempt_id INTEGER, question_id INTEGER, file TEXT)"
+        )
         conn.exec_driver_sql(
             "CREATE TABLE testchecks_transcriptionjob (id INTEGER PRIMARY KEY, answer_id INTEGER, status TEXT)"
         )
