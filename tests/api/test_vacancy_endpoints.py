@@ -43,6 +43,9 @@ def _platform_engine(application_count: int = 0):
         )
         conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, slug TEXT)")
         conn.exec_driver_sql(
+            "CREATE TABLE companies_companyfeature (id INTEGER PRIMARY KEY, company_id INTEGER, feature_key TEXT)"
+        )
+        conn.exec_driver_sql(
             "CREATE TABLE headhunter_vacancycoursemapping (id INTEGER PRIMARY KEY, course_id INTEGER)"
         )
     return engine

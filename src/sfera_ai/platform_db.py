@@ -30,7 +30,7 @@ RESUME_DETECTION_TABLES = CANDIDATE_FACTS_TABLES + (
 MERGE_DETECTION_TABLES = ("courses_candidatemergelog",)
 API_READ_TABLES = (
     "courses_course", "courses_application", "courses_progress", "companies_company",
-    "headhunter_hhnegotiationrecord", "headhunter_vacancycoursemapping",
+    "companies_companyfeature", "headhunter_hhnegotiationrecord", "headhunter_vacancycoursemapping",
 )
 HH_RESUME_COMPANY_TABLES = (
     "headhunter_hhnegotiationrecord",

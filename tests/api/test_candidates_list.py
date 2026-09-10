@@ -25,13 +25,18 @@ def _memory_engine():
     return create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
 
-def _platform_engine(*, applications=(), progress=()):
+def _platform_engine(*, applications=(), progress=(), company_id=1, screening_enabled=True):
     """applications: [(id, candidate_id, course_id)]
-    progress: [(candidate_id, course_id, completed_lessons, total_lessons)]"""
+    progress: [(candidate_id, course_id, completed_lessons, total_lessons)]
+    screening_enabled: пишет/не пишет строку `candidate_screening` в companies_companyfeature
+    для company_id — по умолчанию включена, чтобы не ломать сценарии, не завязанные на фичу."""
     engine = _memory_engine()
     with engine.begin() as conn:
-        conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, course_uuid TEXT)")
+        conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, course_uuid TEXT, company_id INTEGER)")
         conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, slug TEXT)")
+        conn.exec_driver_sql(
+            "CREATE TABLE companies_companyfeature (id INTEGER PRIMARY KEY, company_id INTEGER, feature_key TEXT)"
+        )
         conn.exec_driver_sql(
             "CREATE TABLE headhunter_vacancycoursemapping (id INTEGER PRIMARY KEY, course_id INTEGER)"
         )
@@ -39,8 +44,14 @@ def _platform_engine(*, applications=(), progress=()):
             "CREATE TABLE headhunter_hhnegotiationrecord (id INTEGER PRIMARY KEY, mapping_id INTEGER)"
         )
         conn.exec_driver_sql(
-            f"INSERT INTO courses_course (id, course_uuid) VALUES ({COURSE_ID}, '{COURSE_UUID}')"
+            f"INSERT INTO courses_course (id, course_uuid, company_id) VALUES ({COURSE_ID}, '{COURSE_UUID}', {company_id})"
         )
+        conn.exec_driver_sql(f"INSERT INTO companies_company (id, slug) VALUES ({company_id}, 'acme')")
+        if screening_enabled:
+            conn.exec_driver_sql(
+                f"INSERT INTO companies_companyfeature (company_id, feature_key) "
+                f"VALUES ({company_id}, 'candidate_screening')"
+            )
         conn.exec_driver_sql(
             "CREATE TABLE courses_application (id INTEGER PRIMARY KEY, candidate_id INTEGER, course_id INTEGER)"
         )
@@ -380,3 +391,28 @@ def test_screening_candidates_unknown_course_returns_404():
         )
 
     assert response.status_code == 404
+
+
+def test_screening_candidates_feature_disabled_returns_403():
+    client = _client(_write_engine(), _platform_engine(screening_enabled=False))
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/candidates/screening/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 403
+
+
+def test_screening_candidates_feature_enabled_returns_200():
+    client = _client(_write_engine(), _platform_engine(screening_enabled=True))
+
+    with client:
+        response = client.get(
+            f"/api/v1/courses/{COURSE_UUID}/ai-analysis/candidates/screening/",
+            headers={"X-BFF-Shared-Secret": SECRET},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"items": []}

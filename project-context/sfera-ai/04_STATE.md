@@ -1399,3 +1399,17 @@ E15-01…08 DONE во всех трёх репозиториях (SFERA-AI/`sfer
   разобран на `project-context/sfera-ai/{00_START_HERE,01_PRD,02_CONTEXT,03_TDD,05_EPICS,04_STATE}.md`
   + `step-TEMPLATE.md`. Старые `ARCHITECTURE.md`/`00_STATE.md` в корне `project-context/`
   удалены — содержимое полностью перенесено, потерь нет.
+- `2026-09-10` — шаг `step-06-sfera-ai-backend-enforcement.md` (задача пришла из
+  `FullSphera/project-context/31_candidate-screening-feature-access/`) реализован:
+  `GET /candidates/screening/` отдаёт `403`, если у компании курса не включена фича
+  `candidate_screening`. `companies_companyfeature` добавлена в `API_READ_TABLES`
+  (`platform_db.py`), новая `is_screening_enabled_for_course` в `services/api_read.py`
+  (join `courses_course` → `companies_company` → `companies_companyfeature`), проверка
+  в роуте `api/routes/candidates.py`. TDD: 2 новых теста + fixture `_platform_engine`
+  расширена (`company_id`, `screening_enabled=True` по умолчанию); reflect по
+  `API_READ_TABLES` требует таблицу в схеме — аналогично обновлены fixtures ещё в 4
+  тестовых файлах (`test_export_endpoint.py`, `test_reanalyze.py`,
+  `test_vacancy_endpoints.py`, `test_candidate_detail.py`). `pytest`: 226 passed.
+  `ruff` не установлен в venv — не проверено. **Не сделано:** GRANT SELECT на
+  `companies_companyfeature` для `ai_readonly` на staging/прод перед деплоем (вне
+  доступа агента).

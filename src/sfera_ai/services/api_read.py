@@ -109,6 +109,30 @@ def resolve_company_slug_for_hh_negotiation(platform_base, hh_negotiation_id: in
         ).scalar_one_or_none()
 
 
+def is_screening_enabled_for_course(platform_base, course_id: int) -> bool:
+    """step-06 — доступ к `/candidates/screening/` завязан на `companies_companyfeature`
+    (`feature_key = 'candidate_screening'`) компании курса, не только скрыт на фронте."""
+    Course = platform_base.classes.courses_course
+    Company = platform_base.classes.companies_company
+    CompanyFeature = platform_base.classes.companies_companyfeature
+    with PlatformSession(platform_base.engine) as platform_session:
+        return bool(
+            platform_session.execute(
+                select(CompanyFeature.id)
+                .select_from(Course)
+                .join(Company, Course.company_id == Company.id)
+                .join(
+                    CompanyFeature,
+                    (CompanyFeature.company_id == Company.id)
+                    & (CompanyFeature.feature_key == "candidate_screening"),
+                )
+                .where(Course.id == course_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            is not None
+        )
+
+
 def get_summary(session: Session, course_id: int) -> dict[str, int]:
     """03_TDD.md, «3. API / контракты» — агрегат по AIProcessingJob.status +
     CandidateVacancyAnalysis наличие для course. total — кандидаты, хоть раз затронутые

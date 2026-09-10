@@ -29,6 +29,9 @@ def _platform_engine():
         conn.exec_driver_sql("CREATE TABLE courses_course (id INTEGER PRIMARY KEY, course_uuid TEXT, company_id INTEGER)")
         conn.exec_driver_sql("CREATE TABLE companies_company (id INTEGER PRIMARY KEY, slug TEXT, name TEXT)")
         conn.exec_driver_sql(
+            "CREATE TABLE companies_companyfeature (id INTEGER PRIMARY KEY, company_id INTEGER, feature_key TEXT)"
+        )
+        conn.exec_driver_sql(
             "CREATE TABLE headhunter_vacancycoursemapping "
             "(id INTEGER PRIMARY KEY, course_id INTEGER, hh_vacancy_title TEXT)"
         )

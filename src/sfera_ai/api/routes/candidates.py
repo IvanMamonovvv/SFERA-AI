@@ -7,6 +7,7 @@ from sfera_ai.services.api_read import (
     get_candidate_detail,
     get_candidate_history,
     get_summary,
+    is_screening_enabled_for_course,
     list_candidates,
     list_screening_candidates,
 )
@@ -44,6 +45,8 @@ def get_screening_candidates(
     platform_engine: Engine = Depends(get_platform_engine),
 ) -> dict:
     course_id, platform_base = resolve_course_or_404(platform_engine, course_uuid)
+    if not is_screening_enabled_for_course(platform_base, course_id):
+        raise HTTPException(status_code=403, detail="candidate screening not enabled for this workspace")
     return list_screening_candidates(session, platform_base, course_id)
 
 
